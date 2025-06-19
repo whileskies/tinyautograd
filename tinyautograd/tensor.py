@@ -60,7 +60,7 @@ class Tensor:
                 self._grad = self._grad + out._grad if self._grad is not None else out._grad
             if other._requires_grad:
                 other._grad = other._grad + out._grad if other._grad is not None else out._grad
-        self._backward = _backward
+        out._backward = _backward
 
         return out
     
@@ -80,7 +80,7 @@ class Tensor:
                 grad = self._data * out._grad
                 other._grad = other._grad + grad if other._grad is not None else grad
 
-        self._backward = _backward
+        out._backward = _backward
         return out
     
     def __rmul__(self, other):
@@ -102,7 +102,7 @@ class Tensor:
                 grad = power*(self._data**(power-1)) * out._grad
                 self._grad = self._grad + grad if self._grad is not None else grad
         
-        self._backward = _backward
+        out._backward = _backward
 
         return out
     
@@ -110,5 +110,29 @@ class Tensor:
         return self * other**-1
 
 
+    def sum(self):
+        out = Tensor(self._data.sum(), op='sum', requires_grad=self._requires_grad)
+        out._prev = {self}
+        
+        def _backward():
+            if self._requires_grad:
+                grad = np.ones_like(self._data) * out._grad
+                self._grad = self._grad + grad if self._grad is not None else grad
 
-    
+        out._backward = _backward
+
+        return out
+
+
+    def mean(self):
+        out = Tensor(self._data.mean(), op='mean', requires_grad=self._requires_grad)
+        out._prev = {self}
+        
+        def _backward():
+            if self._requires_grad:
+                grad = np.ones_like(self._data) / self._data.size * out._grad
+                self._grad = self._grad + grad if self._grad is not None else grad
+
+        out._backward = _backward
+
+        return out
