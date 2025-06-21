@@ -25,3 +25,18 @@ cc2 = softmax_cross_entropy(aa2, bb)
 
 dd2 = ((cc2.data - cc.data) / 0.001)
 print(dd2)
+
+def test_matmul():
+    a = Tensor([[1, 2, 3], [1, 2, 3], [1, 2, 3]], requires_grad=True)
+    b = Tensor([[4, 5, 6], [7, 8, 9], [1, 2, 3]], requires_grad=True)
+    y = (a.matmul(b)).sum()
+    print(y.data)
+    y.backward()
+
+    a2 = Tensor([[1.001, 2, 3], [1, 2, 3], [1, 2, 3]], requires_grad=True)
+    y2 = (a2.matmul(b)).sum()
+    print(y2.data)
+    print((y2.data - y.data)/0.001)
+    print(a.grad)
+
+test_matmul()

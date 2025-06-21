@@ -29,6 +29,12 @@ class Tensor:
     @property
     def grad(self):
         return self._grad
+
+    def _add_grad(self, grad):
+        if self._grad is None:
+            self._grad = grad
+        else:
+            self._grad += grad 
     
     def backward(self):
         if self._grad is None:
@@ -108,6 +114,23 @@ class Tensor:
     
     def __truediv__(self, other):
         return self * other**-1
+    
+    def matmul(self, other):
+        out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
+        out._prev = {self, other}
+
+        def _backward():
+            if self._requires_grad:
+                # print('aa', other._data.T)
+                # print('out', out._grad)
+                grad = out._grad @ other._data.T
+                self._add_grad(grad)
+            if other._requires_grad:
+                grad = self._data.T @ out._grad
+                other._add_grad(grad)
+        out._backward = _backward
+
+        return out
 
 
     def sum(self):

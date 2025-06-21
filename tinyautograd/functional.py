@@ -8,7 +8,20 @@ def relu(x: Tensor):
 
     def _backward():
         if x._requires_grad:
-            x._grad = (x._data > 0).astype(np.float32) * out._grad
+            grad = (x._data > 0).astype(np.float32) * out._grad
+            x._add_grad(grad)
+    out._backward = _backward
+    return out
+
+def log(x: Tensor):
+    l = np.log(x._data)
+    out = Tensor(l, op='log', requires_grad=x._requires_grad)
+    out._prev = {x}
+
+    def _backward():
+        if x._requires_grad:
+            grad = (1 / x._data) * out._grad
+            x._add_grad(grad)
     out._backward = _backward
     return out
 
@@ -20,7 +33,8 @@ def tanh(x: Tensor):
 
     def _backward():
         if x._requires_grad:
-            x._grad = (1 - t ** 2) * out._grad
+            grad = (1 - t ** 2) * out._grad
+            x._add_grad(grad)
     out._backward = _backward
     return out
 
@@ -32,7 +46,8 @@ def sigmod(x: Tensor):
 
     def _backward():
         if x._requires_grad:
-            x._grad = s * (1 - s) * out._grad
+            grad = s * (1 - s) * out._grad
+            x._add_grad(grad)
     out._backward = _backward
     return out
 
@@ -46,7 +61,12 @@ def softmax_cross_entropy(logits: Tensor, target: Tensor): # target 是 one-hot 
 
     def _backward():
         if logits._requires_grad:
-            logits._grad = probs - target._data
+            grad = probs - target._data
+            logits._add_grad(grad)
     loss._backward = _backward
     loss._prev = {logits, target}
     return loss
+
+
+def mse_loss(pred, target):
+    return ((pred - target) ** 2).mean()
