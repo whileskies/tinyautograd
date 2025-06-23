@@ -76,4 +76,5 @@ def test_matmul():
     y2 = (a2.matmul(b)).sum()
     print(y2.data)
     print((y2.data - y.data)/0.001)
-    print(a.grad)
+    print(a.grad[0][0])
+    assert a.grad[0][0] - y2.data < 1e-2
