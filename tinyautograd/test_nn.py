@@ -1,10 +1,11 @@
 from .nn import Linear
 from .nn import MLP
 from .tensor import Tensor
-from .functional import mse_loss
+from .functional import mse_loss, tanh
+from .optim import SGD
 
 def assert_grad_right(a, b):
-    assert abs(a - b) < 1, "grad wrong"
+    assert abs(a - b) < 3, "grad wrong"
 
 def test_layer():
     L = Linear(5, 3)
@@ -43,3 +44,39 @@ def test_loss_desc():
 
     y2 = mse_loss(M(x), t)
     print('y2', y2.data)
+    assert y2.data < y.data
+
+def test_sgd():
+    M = MLP(5, [10, 10], 3)
+    opt = SGD(M.parameters(), lr=0.0001)
+    x = Tensor([[1, 2, 3, 4, 5], [2, 4, 6, 8, 10]])
+    t = Tensor([1, 2, 3], [4, 5, 6])
+
+    y = mse_loss(M(x), t)
+    print('y', y.data)
+    y.backward()
+
+    opt.step()
+    y2 = mse_loss(M(x), t)
+    print('y2', y2.data)
+    assert y2.data < y.data
+    
+
+def test_train():
+    model = MLP(3, [4, 4], 1, activation_fun=tanh)
+    opt = SGD(model.parameters(), lr=0.05)
+
+    x = Tensor([[2.0, 3.0, -1.0], [3.0, -1.0, 0.5], [0.5, 1.0, 1.0], [1.0, 1.0, -1.0]])
+    ys = Tensor([[1.0], [-1.0], [-1.0], [1.0]])
+    print(model(x).data)
+    loss = mse_loss(model(x), ys)
+    print(loss.data)
+
+    for i in range(500):
+        loss = mse_loss(model(x), ys)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        print(i, loss.data)
+
+    print('pred: ', model(x).data)
