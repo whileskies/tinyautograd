@@ -50,11 +50,19 @@ class Tensor:
                 topo.append(node)
     
         build(self)
-        print(topo)
+        # print(topo)
 
         for node in reversed(topo):
             node._backward()
 
+    def _unbroadcast(self, grad, shape):
+        """将梯度 grad 还原成目标 shape（用于广播反向传播）"""
+        while len(grad.shape) > len(shape):
+            grad = grad.sum(axis=0)
+        for i, (g_dim, s_dim) in enumerate(zip(grad.shape, shape)):
+            if s_dim == 1 and g_dim != 1:
+                grad = grad.sum(axis=i, keepdims=True)
+        return grad
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -63,9 +71,11 @@ class Tensor:
 
         def _backward():
             if self._requires_grad:
-                self._grad = self._grad + out._grad if self._grad is not None else out._grad
+                grad = self._unbroadcast(out._grad, self._data.shape)
+                self._add_grad(grad)
             if other._requires_grad:
-                other._grad = other._grad + out._grad if other._grad is not None else out._grad
+                grad = self._unbroadcast(out._grad, other._data.shape)
+                other._add_grad(grad)
         out._backward = _backward
 
         return out
@@ -154,8 +164,7 @@ class Tensor:
         def _backward():
             if self._requires_grad:
                 grad = np.ones_like(self._data) / self._data.size * out._grad
-                self._grad = self._grad + grad if self._grad is not None else grad
-
+                self._add_grad(grad)
         out._backward = _backward
 
         return out

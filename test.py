@@ -39,4 +39,22 @@ def test_matmul():
     print((y2.data - y.data)/0.001)
     print(a.grad)
 
-test_matmul()
+
+def test_loss_desc():
+    M = MLP(5, [10, 10], 3)
+    x = Tensor([[1, 2, 3, 4, 5], [2, 4, 6, 8, 10]])
+    t = Tensor([1, 2, 3], [4, 5, 6])
+    print('shape', M(x).shape)
+    y = mse_loss(M(x), t)
+    print(y)
+
+    y.backward()
+    print(M.parameters())
+    for p in M.parameters():
+        print(p)
+        print('data', p.data.shape)
+        print('grad', p.grad.shape)
+    #     if p.grad is not None:
+    #         p.data -= 0.01 * p.grad
+
+test_loss_desc()

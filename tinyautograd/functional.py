@@ -69,4 +69,5 @@ def softmax_cross_entropy(logits: Tensor, target: Tensor): # target 是 one-hot 
 
 
 def mse_loss(pred, target):
+    print('mse_loss:',((pred - target) ** 2).mean())
     return ((pred - target) ** 2).mean()

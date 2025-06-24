@@ -1,6 +1,10 @@
 from .tensor import *
 from .functional import *
 
+def assert_grad_right(a, b):
+    assert abs(a - b) < 1, "grad wrong"
+
+
 def test_grad():
     a = Tensor([[1, 1],[2, 2],[3,3]], requires_grad=True)
     b = Tensor([[4, 4],[5, 5],[6, 6]], requires_grad=True)

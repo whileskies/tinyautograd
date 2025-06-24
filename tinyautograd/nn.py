@@ -7,8 +7,8 @@ class Layer:
 
 class Linear(Layer):
     def __init__(self, in_features, out_features):
-        self.W = Tensor(np.random.randn(in_features, out_features), requires_grad=True)
-        self.b = Tensor(np.zeros((1, out_features)), requires_grad=True)
+        self.W = Tensor(np.random.randn(in_features, out_features), requires_grad=True, label=f'Linear[{in_features}, {out_features}] W')
+        self.b = Tensor(np.zeros((1, out_features)), requires_grad=True, label=f'Linear[{in_features}, {out_features}] b')
         # print(self.W.data)
     
     def __call__(self, x: Tensor):
