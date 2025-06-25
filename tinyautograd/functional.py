@@ -53,7 +53,6 @@ def sigmod(x: Tensor):
 
 
 def softmax_cross_entropy(logits: Tensor, target: Tensor): # target 是 one-hot Tensor
-    # print(np.max(logits._data, axis=-1, keepdims=True))
     e = np.exp(logits._data - np.max(logits._data, axis=-1, keepdims=True))
     probs = e / e.sum(axis=-1, keepdims=True)
     loss_data = -np.sum(target._data * np.log(probs + 1e-9), axis=-1, keepdims=True)
@@ -64,6 +63,7 @@ def softmax_cross_entropy(logits: Tensor, target: Tensor): # target 是 one-hot 
         if logits._requires_grad:
             grad = probs - target._data
             logits._add_grad(grad)
+
     loss._backward = _backward
     loss._prev = {logits, target}
     return loss

@@ -115,9 +115,9 @@ def main():
     train_data, test_data, train_labels, test_labels = train_test_split(train_images, label_images, test_size=0.2)
 
 
-    model = MLP(28*28, [512], 10, activation_fun=relu)
+    model = MLP(28*28, [512, 50], 10, activation_fun=relu)
     opt = SGD(model.parameters())
-    train(model, train_data, train_labels, opt, epochs=20)
+    train(model, train_data, train_labels, opt, epochs=20, batch_size=64)
     test(model, test_data, test_labels)
 
 main()

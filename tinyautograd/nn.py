@@ -7,9 +7,9 @@ class Layer:
 
 class Linear(Layer):
     def __init__(self, in_features, out_features):
-        self._W = Tensor(np.random.randn(in_features, out_features), requires_grad=True, label=f'Linear[{in_features}, {out_features}] W')
+        # ReLU 非线性会让一部分神经元"死亡"(输出恒为0)，使用He初始化(Kaiming Init)
+        self._W = Tensor(np.random.randn(in_features, out_features) * np.sqrt(2 / in_features), requires_grad=True, label=f'Linear[{in_features}, {out_features}] W')
         self._b = Tensor(np.zeros((1, out_features)), requires_grad=True, label=f'Linear[{in_features}, {out_features}] b')
-        # print(self.W.data)
     
     def __call__(self, x: Tensor):
         return x.matmul(self._W) + self._b

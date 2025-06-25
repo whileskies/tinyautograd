@@ -6,8 +6,8 @@ class SGD:
 
     def step(self):
         for p in self._parameters:
-            if p.grad is not None:
-                p._data -= self.lr * p.grad
+            if p._grad is not None:
+                p._data -= self.lr * p._grad
 
     def zero_grad(self):
         for p in self._parameters:
