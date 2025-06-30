@@ -1,7 +1,8 @@
 import numpy as np
+from .ops import Ops
 
 class Tensor:
-    def __init__(self, data, op='', requires_grad=False, label=''):
+    def __init__(self, data, op='', requires_grad=False, label='', device='cpu'):
         self._data = np.array(data, dtype=np.float32)
         self._label = label
         self._op = op
@@ -10,6 +11,7 @@ class Tensor:
         self._requires_grad = requires_grad
         self._backward = lambda: None
         self._prev = set()
+        self._device = device
     
     def __repr__(self):
         return f"Tensor(lable={self._label}, op={self._op}, shape={self._shape})"
@@ -66,7 +68,7 @@ class Tensor:
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(self._data + other._data, op='add', requires_grad=self._requires_grad or other._requires_grad)
+        out = Tensor(Ops.add(self, other), op='add', requires_grad=self._requires_grad or other._requires_grad)
         out._prev = {self, other}
 
         def _backward():

@@ -57,4 +57,12 @@ def test_loss_desc():
     #     if p.grad is not None:
     #         p.data -= 0.01 * p.grad
 
-test_loss_desc()
+# test_loss_desc()
+
+import cupy as cp
+
+a = cp.arange(1000, dtype=cp.float32)
+b = cp.arange(1000, dtype=cp.float32)
+c = a + b
+
+print(c)  # 会输出在 GPU 上计算的结果
