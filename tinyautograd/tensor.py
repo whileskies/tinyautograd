@@ -1,24 +1,48 @@
 import numpy as np
+import ctypes
 from .ops import Ops
 
 class Tensor:
     def __init__(self, data, op='', requires_grad=False, label='', device='cpu'):
-        self._data = np.array(data, dtype=np.float32)
+        if device == 'cpu':
+            if isinstance(data, tuple):
+                arr, shape = data
+                self._data = np.array(arr, dtype=np.float32)
+                self._shape = shape
+                self._device = 'cpu'
+            else:
+                self._data = np.array(data, dtype=np.float32)
+                self._shape = self._data.shape
+                self._device = 'cpu'
+        elif device == 'cuda':
+            if isinstance(data, tuple) and len(data) == 2:
+                gpu_ptr, shape = data
+                self._data = gpu_ptr
+                self._shape = shape
+                self._device = 'cuda'
+            else:
+                raise ValueError("CUDA Tensor 初始化需传入 (gpu_ptr, shape) 二元组")
+        else:
+            raise ValueError(f"不支持的设备类型：{device}")
+
         self._label = label
         self._op = op
-        self._shape = self._data.shape
         self._grad = None
         self._requires_grad = requires_grad
         self._backward = lambda: None
         self._prev = set()
-        self._device = device
-    
+
+
     def __repr__(self):
         return f"Tensor(lable={self._label}, op={self._op}, shape={self._shape})"
     
     @property
     def data(self):
         return self._data
+    
+    @data.setter
+    def data(self, data):
+        self._data = data
     
     @property
     def label(self):
@@ -31,7 +55,28 @@ class Tensor:
     @property
     def grad(self):
         return self._grad
+    
+    @property
+    def size(self):
+        return np.prod(self._shape)
+    
+    @property
+    def device(self):
+        return self._device
+    
+    
+    def to(self, device):
+        if device not in ["cpu", "cuda"]:
+            raise ValueError("Unsupported device. Choose 'cpu' or 'cuda'.")
+        if self._device == device:
+            return self
+        
+        self._data = Ops.to_device(self, device)
+        self._device = device
 
+        return self
+
+    
     def _add_grad(self, grad):
         if self._grad is None:
             self._grad = grad
