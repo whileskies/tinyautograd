@@ -3,6 +3,7 @@ import numpy as np
 from .tensor import *
 import time
 
+
 def test_add_vec():
     a = [[1, 1, 1], [1, 1, 1]]
     b = [[2, 2, 2], [2, 2, 2]]
@@ -14,8 +15,8 @@ def test_add_vec():
     tb.to('cuda')
     tc.to('cuda')
 
-    res = Tensor(Ops.add(ta, tb), device='cuda')
-    res = Tensor(Ops.add(res, tc), device='cuda')
+    res = Ops.add(ta, tb)
+    res = Ops.add(res, tc)
 
     res.to('cpu')
     print(res.data)
@@ -35,8 +36,8 @@ def test_add_vec_large():
     tc = Tensor(c)
 
     start_cpu = time.time()
-    rs_cpu = Tensor(Ops.add(ta, tb))
-    res_cpu = Tensor(Ops.add(rs_cpu, tc))
+    rs_cpu = Ops.add(ta, tb)
+    res_cpu = Ops.add(rs_cpu, tc)
     cpu_time = time.time() - start_cpu
 
     res_cpu_np = res_cpu.data  # NumPy 结果
@@ -47,8 +48,8 @@ def test_add_vec_large():
     tc_gpu = tc.to('cuda')
 
     start_gpu = time.time()
-    res_gpu = Tensor(Ops.add(ta_gpu, tb_gpu), device='cuda')
-    res_gpu = Tensor(Ops.add(res_gpu, tc_gpu), device='cuda')
+    res_gpu = Ops.add(ta_gpu, tb_gpu)
+    res_gpu = Ops.add(res_gpu, tc_gpu)
     gpu_time = time.time() - start_gpu
 
     res_gpu_cpu = res_gpu.to('cpu')
@@ -59,3 +60,18 @@ def test_add_vec_large():
     print(f"CUDA time: {gpu_time * 1000:.2f} ms")
     print(f"Max error: {np.abs(res_gpu_np - res_cpu_np).max()}")
     print("First 3 results:", res_gpu_np[:3])
+
+
+def test_vec_add_broadcast():
+    a = [[1, 1, 1], [3, 3, 3]]
+    b = [[2, 2, 2]]
+    ta = Tensor(a)
+    tb = Tensor(b)
+    ta.to('cuda')
+    tb.to('cuda')
+
+    res = Ops.add(ta, tb)
+
+    res.to('cpu')
+    print(res.data)
+    print(res.shape)

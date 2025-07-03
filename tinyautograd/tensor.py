@@ -3,25 +3,15 @@ import ctypes
 from .ops import Ops
 
 class Tensor:
-    def __init__(self, data, op='', requires_grad=False, label='', device='cpu'):
+    def __init__(self, data, op='', requires_grad=False, label='', device='cpu', shape=None):
         if device == 'cpu':
-            if isinstance(data, tuple):
-                arr, shape = data
-                self._data = np.array(arr, dtype=np.float32)
-                self._shape = shape
-                self._device = 'cpu'
-            else:
-                self._data = np.array(data, dtype=np.float32)
-                self._shape = self._data.shape
-                self._device = 'cpu'
+            self._data = np.array(data, dtype=np.float32)
+            self._shape = self._data.shape
+            self._device = 'cpu'
         elif device == 'cuda':
-            if isinstance(data, tuple) and len(data) == 2:
-                gpu_ptr, shape = data
-                self._data = gpu_ptr
-                self._shape = shape
-                self._device = 'cuda'
-            else:
-                raise ValueError("CUDA Tensor 初始化需传入 (gpu_ptr, shape) 二元组")
+            self._data = data
+            self._shape = shape
+            self._device = 'cuda'
         else:
             raise ValueError(f"不支持的设备类型：{device}")
 
@@ -63,6 +53,11 @@ class Tensor:
     @property
     def device(self):
         return self._device
+
+    @property
+    def requires_grad(self):
+        return self._requires_grad 
+    
     
     
     def to(self, device):
@@ -104,16 +99,22 @@ class Tensor:
 
     def _unbroadcast(self, grad, shape):
         """将梯度 grad 还原成目标 shape（用于广播反向传播）"""
-        while len(grad.shape) > len(shape):
-            grad = grad.sum(axis=0)
-        for i, (g_dim, s_dim) in enumerate(zip(grad.shape, shape)):
-            if s_dim == 1 and g_dim != 1:
-                grad = grad.sum(axis=i, keepdims=True)
-        return grad
+
+        # while len(grad.shape) > len(shape):
+        #     grad = grad.sum(axis=0)
+        # for i, (g_dim, s_dim) in enumerate(zip(grad.shape, shape)):
+        #     if s_dim == 1 and g_dim != 1:
+        #         grad = grad.sum(axis=i, keepdims=True)
+        if grad.shape[0] != shape[0]:
+            return np.sum(grad, axis=0, keepdims=True)
+        else:
+            return grad
+
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(Ops.add(self, other), op='add', requires_grad=self._requires_grad or other._requires_grad)
+        out = Ops.add(self, other)
+        # out = Tensor(Ops.add(self, other), op='add', requires_grad=self._requires_grad or other._requires_grad)
         out._prev = {self, other}
 
         def _backward():
@@ -178,8 +179,6 @@ class Tensor:
 
         def _backward():
             if self._requires_grad:
-                # print('aa', other._data.T)
-                # print('out', out._grad)
                 grad = out._grad @ other._data.T
                 self._add_grad(grad)
             if other._requires_grad:
@@ -215,3 +214,11 @@ class Tensor:
         out._backward = _backward
 
         return out
+    
+    def __del__(self):
+        if self._device == "cuda":
+            if self.data is not None:
+                print("free gpu memory")
+                Ops.free_gpu_memory(self.data)
+            # if self.grad is not None:
+            #     free_gpu_memory(self.grad.data)
