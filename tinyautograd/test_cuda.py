@@ -75,3 +75,64 @@ def test_vec_add_broadcast():
     res.to('cpu')
     print(res.data)
     print(res.shape)
+
+
+def test_vec_mul():
+    a = [[1, 1, 1], [3, 3, 3]]
+    b = [5]
+    # a,b = b,a
+    ta = Tensor(a)
+    tb = Tensor(b)
+    ta.to('cuda')
+    tb.to('cuda')
+
+    res = Ops.mul(ta, tb)
+
+    res.to('cpu')
+    print(res.data)
+    print(res.shape)
+
+
+def test_vec_mul_broadcast():
+    a = [[1, 1, 1], [3, 3, 3]]
+    b = [[2, 2, 2]]
+    ta = Tensor(a)
+    tb = Tensor(b)
+    ta.to('cuda')
+    tb.to('cuda')
+
+    res = Ops.mul(ta, tb)
+
+    res.to('cpu')
+    print(res.data)
+    print(res.shape)
+
+
+def test_power_large():
+    N = 100_000_000  
+    x = np.full((3, N), 2.0, dtype=np.float32)
+    power = 3.0
+
+    print("Input shape:", x.shape)
+
+    # ===== CPU 计算 =====
+    tx = Tensor(x)
+    start_cpu = time.time()
+    res_cpu = tx ** power  # 调用 Tensor.__pow__
+    cpu_time = time.time() - start_cpu
+    res_cpu_np = res_cpu.data  # NumPy 结果
+
+    # ===== CUDA 计算 =====
+    tx_gpu = tx.to('cuda')
+    start_gpu = time.time()
+    res_gpu = Ops.pow(tx_gpu, power)
+    gpu_time = time.time() - start_gpu
+
+    res_gpu_cpu = res_gpu.to('cpu')
+    res_gpu_np = res_gpu_cpu.data
+
+    # ===== 比较结果与时间 =====
+    print(f"CPU time:  {cpu_time * 1000:.2f} ms")
+    print(f"CUDA time: {gpu_time * 1000:.2f} ms")
+    print(f"Max error: {np.abs(res_gpu_np - res_cpu_np).max()}")
+    print("First 3 values:", res_gpu_np.ravel()[:3])
