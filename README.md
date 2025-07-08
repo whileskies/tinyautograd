@@ -6,4 +6,5 @@ python -m samples.mnist.mnist
 
 # cuda 🚧
 nvcc -shared -o libops.so tinyautograd/ops.cu  -Xcompiler -fPIC
+
 python -m samples.mnist.mnist-cuda
