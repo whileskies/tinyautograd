@@ -187,3 +187,97 @@ extern "C" void launch_power(const float* x, float* y, float p, int n) {
     cudaDeviceSynchronize();
 }
 
+
+__global__ void power_local_grad_kernel(const float* x, float* grad, float p, int n) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < n) {
+        grad[idx] = p * powf(x[idx], p - 1.0f);
+    }
+}
+
+extern "C" void launch_power_grad(const float* x, float* grad, float p, int n) {
+    int block = 1024;
+    int grid = (n + block - 1) / block;
+    power_local_grad_kernel<<<grid, block>>>(x, grad, p, n);
+    cudaDeviceSynchronize();
+}
+
+
+// reduce
+__global__ void reduce_sum_kernel(const float *input, float *output, int n) {
+    extern __shared__ float sdata[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    sdata[tid] = (idx < n) ? input[idx] : 0.0f;
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        output[blockIdx.x] = sdata[0];
+    }
+}
+
+extern "C" void launch_sum(float *d_input, float *d_output, int n) {
+    int threads = 256;
+    int blocks = (n + threads - 1) / threads;
+
+    float *d_temp = NULL;
+    cudaMalloc(&d_temp, blocks * sizeof(float));
+
+    reduce_sum_kernel<<<blocks, threads, threads * sizeof(float)>>>(d_input, d_temp, n);
+
+    int s = blocks;
+    while (s > 1) {
+        int threads2 = (s > 256) ? 256 : s;
+        int blocks2 = (s + threads2 - 1) / threads2;
+        reduce_sum_kernel<<<blocks2, threads2, threads2 * sizeof(float)>>>(d_temp, d_temp, s);
+    }
+
+    cudaMemcpy(d_output, d_temp, sizeof(float), cudaMemcpyDeviceToDevice);
+    cudaFree(d_temp);
+}
+
+__global__ void sum_axis0_kernel(const float *input, float *output, int N, int M) {
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (col >= M) return;
+
+    float sum = 0;
+    for (int row = 0; row < N; row++) {
+        sum += input[row * M + col];
+    }
+
+    output[col] = sum;
+}
+
+extern "C" void launch_sum_axis0(const float *d_input, float *d_output, int N, int M) {
+    int blockSize = 256;
+    int gridSize = (M + blockSize - 1) / blockSize;
+    sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
+}
+
+
+__global__ void sum_axis1_kernel(const float *input, float *output, int N, int M) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= N) return;
+
+    float sum = 0;
+    for (int col = 0; col < M; col++) {
+        sum += input[row * M + col];
+    }
+
+    output[row] = sum;
+}
+
+extern "C" void launch_sum_axis1(const float *d_input, float *d_output, int N, int M) {
+    int blockSize = 256;
+    int gridSize = (N + blockSize - 1) / blockSize;
+    sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
+}

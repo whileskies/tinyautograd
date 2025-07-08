@@ -136,3 +136,12 @@ def test_power_large():
     print(f"CUDA time: {gpu_time * 1000:.2f} ms")
     print(f"Max error: {np.abs(res_gpu_np - res_cpu_np).max()}")
     print("First 3 values:", res_gpu_np.ravel()[:3])
+
+
+def test_sum():
+    a = [1, 2, 3, 4, 5]
+    ta = Tensor(a)
+    ta.to('cuda')
+    tb = Ops.sum(ta)
+    tb.to('cpu')
+    print(tb.data)
