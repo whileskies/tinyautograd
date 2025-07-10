@@ -139,9 +139,37 @@ def test_power_large():
 
 
 def test_sum():
-    a = [1, 2, 3, 4, 5]
+    for i in range (10000, 20000):
+        a = [1] * i
+        # print(i, len(a))
+        ta = Tensor(a)
+        ta.to('cuda')
+        tb = Ops.sum(ta)
+        tb.to('cpu')
+        assert tb.data[0] == len(a)
+
+def test_sum_axis0():
+    a0 = [1] * 10000
+    a1 = [2] * 10000
+    a = [a0, a1]
+    na = np.array(a)
+    nas = na.sum(axis=0, keepdims=False)
+    print(nas[0], nas.shape)
     ta = Tensor(a)
     ta.to('cuda')
-    tb = Ops.sum(ta)
+    tb = Ops.sum(ta, axis=0, keepdims=False)
     tb.to('cpu')
-    print(tb.data)
+    print(tb.data[0], tb.shape)
+
+def test_sum_axis1():
+    a0 = [1] * 10000
+    a1 = [2] * 10000
+    a = [a0, a1]
+    na = np.array(a)
+    nas = na.sum(axis=1, keepdims=True)
+    print(nas, nas.shape)
+    ta = Tensor(a)
+    ta.to('cuda')
+    tb = Ops.sum(ta, axis=1, keepdims=True)
+    tb.to('cpu')
+    print(tb.data, tb.shape)

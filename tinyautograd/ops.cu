@@ -236,9 +236,10 @@ extern "C" void launch_sum(float *d_input, float *d_output, int n) {
 
     int s = blocks;
     while (s > 1) {
-        int threads2 = (s > 256) ? 256 : s;
+        int threads2 = 256;
         int blocks2 = (s + threads2 - 1) / threads2;
         reduce_sum_kernel<<<blocks2, threads2, threads2 * sizeof(float)>>>(d_temp, d_temp, s);
+        s = blocks2;
     }
 
     cudaMemcpy(d_output, d_temp, sizeof(float), cudaMemcpyDeviceToDevice);
