@@ -264,20 +264,75 @@ extern "C" void launch_sum_axis0(const float *d_input, float *d_output, int N, i
 }
 
 
-__global__ void sum_axis1_kernel(const float *input, float *output, int N, int M) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    if (row >= N) return;
+// __global__ void sum_axis1_kernel(const float *input, float *output, int N, int M) {
+//     int row = blockIdx.x * blockDim.x + threadIdx.x;
+//     if (row >= N) return;
 
-    float sum = 0;
-    for (int col = 0; col < M; col++) {
-        sum += input[row * M + col];
+//     float sum = 0;
+//     for (int col = 0; col < M; col++) {
+//         sum += input[row * M + col];
+//     }
+
+//     output[row] = sum;
+// }
+
+// extern "C" void launch_sum_axis1(const float *d_input, float *d_output, int N, int M) {
+//     int blockSize = 256;
+//     int gridSize = (N + blockSize - 1) / blockSize;
+//     sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
+// }
+
+__global__ void reduce_axis1_stage1(const float* input, float* partial, int N, int M, int stride) {
+    int row = blockIdx.y;
+    int seg = blockIdx.x;  // segment/block index along the row
+    int tid = threadIdx.x;
+
+    int start = seg * stride;
+    int end = min(start + stride, M);
+
+    extern __shared__ float sdata[];
+    float sum = 0.0f;
+
+    for (int i = start + tid; i < end; i += blockDim.x) {
+        sum += input[row * M + i];
     }
 
+    sdata[tid] = sum;
+    __syncthreads();
+
+    // intra-block reduction
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s)
+            sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+
+    // store local result
+    if (tid == 0)
+        partial[row * gridDim.x + seg] = sdata[0];
+}
+
+__global__ void reduce_axis1_stage2(const float* partial, float* output, int N, int num_partials) {
+    int row = blockIdx.x;
+    float sum = 0.0f;
+    for (int i = 0; i < num_partials; ++i) {
+        sum += partial[row * num_partials + i];
+    }
     output[row] = sum;
 }
 
-extern "C" void launch_sum_axis1(const float *d_input, float *d_output, int N, int M) {
-    int blockSize = 256;
-    int gridSize = (N + blockSize - 1) / blockSize;
-    sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
+
+extern "C" void launch_sum_axis1(const float* d_input, float* d_output, int N, int M) {
+    int stride = 1024;
+    int num_seg = (M + stride - 1) / stride;
+    int threads = 256;
+
+    float* d_partial = nullptr;
+    cudaMalloc(&d_partial, sizeof(float) * N * num_seg);
+
+    dim3 grid(num_seg, N);
+    reduce_axis1_stage1<<<grid, threads, threads * sizeof(float)>>>(d_input, d_partial, N, M, stride);
+
+    reduce_axis1_stage2<<<N, 1>>>(d_partial, d_output, N, num_seg);
+    cudaFree(d_partial);
 }
