@@ -116,6 +116,7 @@ class Tensor:
         out = Ops.add(self, other)
         # out = Tensor(Ops.add(self, other), op='add', requires_grad=self._requires_grad or other._requires_grad)
         out._prev = {self, other}
+        out._requires_grad = self._requires_grad or other._requires_grad
 
         def _backward():
             if self._requires_grad:
@@ -133,8 +134,10 @@ class Tensor:
 
     def __mul__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(self._data * other._data, op='mul', requires_grad=self._requires_grad or other._requires_grad)
+        out = Ops.mul(self, other)
+        # out = Tensor(self._data * other._data, op='mul', requires_grad=self._requires_grad or other._requires_grad)
         out._prev = {self, other}
+        out._requires_grad = self._requires_grad or other._requires_grad
 
         def _backward():
             if self._requires_grad:
@@ -158,8 +161,10 @@ class Tensor:
     
     def __pow__(self, power):
         assert isinstance(power, (int, float)), "only supporting int/float powers for now"
-        out = Tensor(self._data**power, op='pow', requires_grad=self._requires_grad)
+        # out = Tensor(self._data**power, op='pow', requires_grad=self._requires_grad)
+        out = Ops.pow(self)
         out._prev = {self}
+        out._requires_grad = self._requires_grad
 
         def _backward():
             if self._requires_grad:
@@ -174,8 +179,10 @@ class Tensor:
         return self * other**-1
     
     def matmul(self, other):
-        out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
+        # out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
+        out = Ops.matmul(self, other)
         out._prev = {self, other}
+        out._requires_grad = self._requires_grad or other._requires_grad
 
         def _backward():
             if self._requires_grad:
@@ -190,8 +197,10 @@ class Tensor:
 
 
     def sum(self):
-        out = Tensor(self._data.sum(), op='sum', requires_grad=self._requires_grad)
+        # out = Tensor(self._data.sum(), op='sum', requires_grad=self._requires_grad)
+        out = Ops.sum(self)
         out._prev = {self}
+        out._requires_grad = self._requires_grad
         
         def _backward():
             if self._requires_grad:
@@ -203,17 +212,17 @@ class Tensor:
         return out
 
 
-    def mean(self):
-        out = Tensor(self._data.mean(), op='mean', requires_grad=self._requires_grad)
-        out._prev = {self}
+    # def mean(self):
+    #     out = Tensor(self._data.mean(), op='mean', requires_grad=self._requires_grad)
+    #     out._prev = {self}
         
-        def _backward():
-            if self._requires_grad:
-                grad = np.ones_like(self._data) / self._data.size * out._grad
-                self._add_grad(grad)
-        out._backward = _backward
+    #     def _backward():
+    #         if self._requires_grad:
+    #             grad = np.ones_like(self._data) / self._data.size * out._grad
+    #             self._add_grad(grad)
+    #     out._backward = _backward
 
-        return out
+    #     return out
     
     def __del__(self):
         if self._device == "cuda":

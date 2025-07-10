@@ -1,10 +1,13 @@
 from .tensor import Tensor
+from .ops import Ops
 import numpy as np
 
 def relu(x: Tensor):
-    out_data = np.maximum(0, x._data)
-    out = Tensor(out_data, op='relu', requires_grad=x._requires_grad)
+    # out_dta = np.maximum(0, x._data)
+    # out = Tonsor(out_data, op='relu', requires_grad=x._requires_grad)
+    out = Ops.relu(x)
     out._prev = {x}
+    out._requires_grad = x._requires_grad
 
     def _backward():
         if x._requires_grad:

@@ -149,8 +149,8 @@ def test_sum():
         assert tb.data[0] == len(a)
 
 def test_sum_axis0():
-    a0 = [1] * 10000
-    a1 = [2] * 10000
+    a0 = [1] * 12345
+    a1 = [2] * 12345
     a = [a0, a1]
     na = np.array(a)
     nas = na.sum(axis=0, keepdims=False)
@@ -162,14 +162,33 @@ def test_sum_axis0():
     print(tb.data[0], tb.shape)
 
 def test_sum_axis1():
-    a0 = [1] * 10000
-    a1 = [2] * 10000
-    a = [a0, a1]
-    na = np.array(a)
-    nas = na.sum(axis=1, keepdims=True)
-    print(nas, nas.shape)
+    for i in range (10000, 12345):
+        # print(i)
+        a0 = [1] * i
+        a1 = [2] * i
+        a2 = [3] * i
+        a = [a0, a1, a2]
+        na = np.array(a)
+        nas = na.sum(axis=1, keepdims=True)
+        # print(nas, nas.shape)
+        ta = Tensor(a)
+        ta.to('cuda')
+        tb = Ops.sum(ta, axis=1, keepdims=True)
+        tb.to('cpu')
+        # print(tb.data, tb.shape)
+        assert nas[0] == tb.data[0] and nas[1] == tb.data[1] and nas[2] == tb.data[2]
+
+
+def test_ones_like():
+    a = [[1, 2, 3], [4, 5, 6]]
     ta = Tensor(a)
     ta.to('cuda')
-    tb = Ops.sum(ta, axis=1, keepdims=True)
+    tb = Ops.ones_like(ta)
     tb.to('cpu')
-    print(tb.data, tb.shape)
+    print(tb.data)
+    print(tb.shape)
+
+    na = np.array(a)
+    nb = np.ones_like(na)
+    print(nb)
+    print(nb.shape)

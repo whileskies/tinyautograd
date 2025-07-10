@@ -337,3 +337,18 @@ extern "C" void launch_sum_axis1(const float* d_input, float* d_output, int N, i
     reduce_axis1_stage2<<<N, 1>>>(d_partial, d_output, N, num_seg);
     cudaFree(d_partial);
 }
+
+
+__global__ void fill_kernel(float *data, float value, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        data[i] = value;
+    }
+}
+
+
+extern "C" void launch_fill(float *d_data, float value, int n) {
+    int blockSize = 256;
+    int gridSize = (n + blockSize - 1) / blockSize;
+    fill_kernel<<<gridSize, blockSize>>>(d_data, value, n);
+}

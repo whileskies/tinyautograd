@@ -25,6 +25,28 @@ class Ops:
         return a.device
     
     @staticmethod
+    def to_device(a, device):
+        if device == 'cuda':
+            a_h = a.data.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            a_d = lib.move_to_gpu(a_h, a.data.size)
+            return a_d
+        else:
+            n = a.size
+            host_buffer = np.empty(n, dtype=np.float32)
+            host_ptr = host_buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            src_ptr = a.data
+            lib.move_to_cpu(host_ptr, src_ptr, n)
+            host_buffer = np.reshape(host_buffer, a.shape)
+
+            return host_buffer
+        
+
+    @staticmethod
+    def free_gpu_memory(data):
+        lib.free_gpu_memory(data)
+
+    
+    @staticmethod
     def broadcast_shape(shape_a, shape_b):
         # 反向对齐
         result = []
@@ -49,12 +71,10 @@ class Ops:
         return t[::-1]
     
     @staticmethod 
-    def tensor(a, b, data, op='', shape=None):
+    def tensor(data, device, op='', shape=None):
         from .tensor import Tensor
-        if isinstance(b, Tensor):
-            return Tensor(data, op, requires_grad=a.requires_grad or b.requires_grad, device=a.device, shape=shape)
-        else:
-            return Tensor(data, op, requires_grad=a.requires_grad, device=a.device, shape=shape)
+        return Tensor(data, op, requires_grad=False, device=device, shape=shape)
+
 
 
     lib.add_vec.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
@@ -85,10 +105,10 @@ class Ops:
             else:
                 raise ValueError(f"不支持的广播 shape: a.shape={a.shape}, b.shape={b.shape}")
             
-            return Ops.tensor(a, b, out, op='+', shape=a.shape)
+            return Ops.tensor(out, device=a.device, op='+', shape=a.shape)
         else:
             c = a.data + b.data
-            return Ops.tensor(a, b, c, op='+')
+            return Ops.tensor(c, device=a.device, op='+')
 
 
     lib.mul_vec.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
@@ -119,10 +139,10 @@ class Ops:
             else:
                 raise ValueError(f"不支持的广播 shape: a.shape={a.shape}, b.shape={b.shape}")
             
-            return Ops.tensor(a, b, out, op='*', shape=a.shape)
+            return Ops.tensor(out, device=a.device, op='*', shape=a.shape)
         else:
             c = a.data * b.data
-            return Ops.tensor(a, b, c, op='*')
+            return Ops.tensor(c, device=a.device, op='*')
     
 
     lib.launch_power.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
@@ -133,10 +153,10 @@ class Ops:
             out = lib.alloc_on_gpu(a.size)
             lib.launch_power(a.data, out, fb, a.size)
 
-            return Ops.tensor(a, b, out, op='**', shape=a.shape)
+            return Ops.tensor(out, device=a.device, op='**', shape=a.shape)
         else:
             c = a**b
-            return Ops.tensor(a, b, c, op='**')
+            return Ops.tensor(c, device=a.device, op='**')
 
    
     lib.launch_power_grad.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
@@ -147,10 +167,10 @@ class Ops:
             out = lib.alloc_on_gpu(a.size)
             lib.launch_power_grad(a.data, out, fb, a.size)
 
-            return Ops.tensor(a, b, out, op='**-grad', shape=a.shape)
+            return Ops.tensor(out, device=a.device, op='**-grad', shape=a.shape)
         else:
             grad = b * (a.data ** (b - 1))
-            return Ops.tensor(a, b, grad, op='**-grad')
+            return Ops.tensor(grad, device=a.device, op='**-grad')
 
 
     lib.launch_sum.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
@@ -178,29 +198,77 @@ class Ops:
             else:
                 raise ValueError(f"不支持的 axis: {axis}")
             
-            return Ops.tensor(a, None, out, op='sum', shape=shape)
+            return Ops.tensor(out, device=a.device, op='sum', shape=shape)
         else:
             d = a.data.sum(axis=axis, keepdims=keepdims)
-            return Ops.tensor(a, None, d, op='sum')
+            return Ops.tensor(d, device=a.device, op='sum')
+
+
+    lib.launch_fill.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
+    @staticmethod
+    def ones_like(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = lib.alloc_on_gpu(sz)
+            lib.launch_fill(out, 1, sz)
+            return Ops.tensor(out, device='cuda', op='ones_like', shape=a.shape)
+        else:
+            d = np.ones_like(a)
+            return Ops.tensor(d, device='cpu', op='ones_like')
 
 
     @staticmethod
-    def to_device(a, device):
-        if device == 'cuda':
-            a_h = a.data.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-            a_d = lib.move_to_gpu(a_h, a.data.size)
-            return a_d
+    def matmul(a, b):
+        if Ops.device(a, b) == 'cuda':
+            pass
         else:
-            n = a.size
-            host_buffer = np.empty(n, dtype=np.float32)
-            host_ptr = host_buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-            src_ptr = a.data
-            lib.move_to_cpu(host_ptr, src_ptr, n)
-            host_buffer = np.reshape(host_buffer, a.shape)
-
-            return host_buffer
+            c = a.data @ b.data
+            return Ops.tensor(c, device=a.device, op='matmul')
+        
+    
+    # Transpose
+    @staticmethod  
+    def T(a):
+        if a.device == 'cuda':
+            pass
+        else:
+            return Ops.tensor(a.T, device=a.device, op='T')
         
 
     @staticmethod
-    def free_gpu_memory(data):
-        lib.free_gpu_memory(data)
+    def relu(a):
+        if a.device == 'cuda':
+            pass
+        else:
+            r = np.maximum(0, a.data)
+            return Ops.tensor(r, device=a.device, op='relu')
+        
+    @staticmethod
+    def log(a):
+        if a.device == 'cuda':
+            pass
+        else:
+            r = np.log(a.data)
+            return Ops.tensor(r, device=a.device, op='log')
+        
+
+    @staticmethod
+    def tanh(a):
+        if a.device == 'cuda':
+            pass
+        else:
+            r = np.tanh(a.data)
+            return Ops.tensor(r, device=a.device, op='tanh')
+        
+    
+    @staticmethod
+    def sigmod(a):
+        if a.device == 'cuda':
+            pass
+        else:
+            r = 1 / (1 + np.exp(-x._data))
+            return Ops.tensor(r, device=a.device, op='sigmod')
+        
+
+
+        
