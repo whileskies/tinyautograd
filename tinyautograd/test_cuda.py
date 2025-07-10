@@ -1,4 +1,4 @@
-from .ops import *
+from .rawtensor import *
 import numpy as np
 from .tensor import *
 import time

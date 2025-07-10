@@ -1,5 +1,5 @@
 from .tensor import Tensor
-from .ops import Ops
+# from .rawtensor import Ops
 import numpy as np
 
 def relu(x: Tensor):

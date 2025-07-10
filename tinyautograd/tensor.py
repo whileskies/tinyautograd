@@ -1,6 +1,6 @@
 import numpy as np
 import ctypes
-from .ops import Ops
+# from . import Ops
 
 class Tensor:
     def __init__(self, data, op='', requires_grad=False, label='', device='cpu', shape=None):
