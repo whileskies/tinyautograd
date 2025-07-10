@@ -168,13 +168,13 @@ class Ops:
                 N, M = a.shape
                 out = lib.alloc_on_gpu(M)
                 lib.launch_sum_axis0(a.data, out, N, M)
-                shape = a.shape if keepdims else (M,) 
+                shape = (1,M) if keepdims else (M,) 
                 
             elif axis == 1:
                 N, M = a.shape
                 out = lib.alloc_on_gpu(N)
                 lib.launch_sum_axis1(a.data, out, N, M)
-                shape = a.shape if keepdims else (N,)
+                shape = (N, 1) if keepdims else (N,)
             else:
                 raise ValueError(f"不支持的 axis: {axis}")
             

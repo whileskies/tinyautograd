@@ -236,9 +236,10 @@ extern "C" void launch_sum(float *d_input, float *d_output, int n) {
 
     int s = blocks;
     while (s > 1) {
-        int threads2 = (s > 256) ? 256 : s;
+        int threads2 = 256;
         int blocks2 = (s + threads2 - 1) / threads2;
         reduce_sum_kernel<<<blocks2, threads2, threads2 * sizeof(float)>>>(d_temp, d_temp, s);
+        s = blocks2;
     }
 
     cudaMemcpy(d_output, d_temp, sizeof(float), cudaMemcpyDeviceToDevice);
@@ -279,5 +280,5 @@ __global__ void sum_axis1_kernel(const float *input, float *output, int N, int M
 extern "C" void launch_sum_axis1(const float *d_input, float *d_output, int N, int M) {
     int blockSize = 256;
     int gridSize = (N + blockSize - 1) / blockSize;
-    sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
+    sum_axis1_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
 }

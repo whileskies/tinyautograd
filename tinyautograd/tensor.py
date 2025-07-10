@@ -218,7 +218,7 @@ class Tensor:
     def __del__(self):
         if self._device == "cuda":
             if self.data is not None:
-                print("free gpu memory")
+                # print("free gpu memory")
                 Ops.free_gpu_memory(self.data)
             # if self.grad is not None:
             #     free_gpu_memory(self.grad.data)
