@@ -65,6 +65,7 @@ class RawTensor:
             self.data = host_buffer
         else:
             raise  ValueError(f"Unsupported device: {device}")
+        return self
 
     
     # @staticmethod
@@ -100,9 +101,6 @@ class RawTensor:
     def __add__(self, other):
         if not isinstance(other, RawTensor):
             other = RawTensor(other, device='cpu')
-            print('other')
-            print(other.data)
-            print(other.shape)
             if self.device == 'cuda':
                 other.to('cuda')
         
@@ -132,54 +130,71 @@ class RawTensor:
         else:
             r = a.data + b.data
             return RawTensor(r, device=a.device)
+        
+    def __radd__(self, other):
+        return self + other
 
 
-    # lib.mul_vec.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
-    # lib.mul_vec_broadcast.argtypes = [
-    #     ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-    #     ctypes.c_int, ctypes.c_int, ctypes.c_int
-    # ]    
-    # @staticmethod
-    # def mul(a, b):
-    #     if Ops.device(a, b) == 'cuda':
-    #         if a.size < b.size:
-    #             a, b = b, a
+    lib.mul_vec.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+    lib.mul_vec_broadcast.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_int, ctypes.c_int, ctypes.c_int
+    ]    
+    def __mul__(self, other):
+        if not isinstance(other, RawTensor):
+            other = RawTensor(other, device='cpu')
+            if self.device == 'cuda':
+                other.to('cuda')
+
+        a, b = self, other
+        if RawTensor.device(a, b) == 'cuda':
+            if a.size < b.size:
+                a, b = b, a
             
-    #         out = lib.alloc_on_gpu(a.size)
+            out = lib.alloc_on_gpu(a.size)
 
-    #         if a.shape == b.shape:
-    #             lib.mul_vec(a.data, b.data, out, a.size)
-    #         elif b.shape == (1, a.shape[1]):
-    #             # 按行广播：(N, D) + (1, D)
-    #             lib.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 0)
-    #         elif b.shape == (a.shape[0], 1):
-    #             # 按列广播：(N, D) + (N, 1)
-    #             lib.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 1)
+            if a.shape == b.shape:
+                lib.mul_vec(a.data, b.data, out, a.size)
+            elif b.shape == (1, a.shape[1]):
+                # 按行广播：(N, D) + (1, D)
+                lib.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 0)
+            elif b.shape == (a.shape[0], 1):
+                # 按列广播：(N, D) + (N, 1)
+                lib.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 1)
 
-    #         elif b.shape == (1,):
-    #             # 标量广播
-    #             lib.mul_vec_broadcast(a.data, b.data, out, a.size, 1, -1)
-    #         else:
-    #             raise ValueError(f"不支持的广播 shape: a.shape={a.shape}, b.shape={b.shape}")
+            elif b.shape == (1,):
+                # 标量广播
+                lib.mul_vec_broadcast(a.data, b.data, out, a.size, 1, -1)
+            else:
+                raise ValueError(f"不支持的广播 shape: a.shape={a.shape}, b.shape={b.shape}")
             
-    #         return Ops.tensor(out, device=a.device, op='*', shape=a.shape)
-    #     else:
-    #         c = a.data * b.data
-    #         return Ops.tensor(c, device=a.device, op='*')
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            r = a.data * b.data
+            return RawTensor(r, device=a.device)
     
 
-    # lib.launch_power.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
-    # @staticmethod
-    # def pow(a, b):
-    #     if a.device == 'cuda':
-    #         fb = float(b)
-    #         out = lib.alloc_on_gpu(a.size)
-    #         lib.launch_power(a.data, out, fb, a.size)
+    def __rmul__(self, other):
+        return self * other
 
-    #         return Ops.tensor(out, device=a.device, op='**', shape=a.shape)
-    #     else:
-    #         c = a**b
-    #         return Ops.tensor(c, device=a.device, op='**')
+    def __neg__(self):
+        return self * -1
+    
+    def __sub__(self, other):
+        return self + (-other)
+
+    lib.launch_power.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
+    def __pow__(self, power):
+        assert isinstance(power, (int, float)), "only supporting int/float powers for now"
+        if self.device == 'cuda':
+            fb = float(power)
+            out = lib.alloc_on_gpu(self.size)
+            lib.launch_power(self.data, out, fb, self.size)
+
+            return RawTensor(out, device=self.device, shape=self.shape)
+        else:
+            r = self.data ** power
+            return RawTensor(r, device=self.device)
 
    
     # lib.launch_power_grad.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
@@ -196,48 +211,47 @@ class RawTensor:
     #         return Ops.tensor(grad, device=a.device, op='**-grad')
 
 
-    # lib.launch_sum.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
-    # lib.launch_sum_axis0.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
-    # lib.launch_sum_axis1.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
-    # @staticmethod
-    # def sum(a, axis=None, keepdims=False):
-    #     if a.device == 'cuda':    
-    #         if axis is None:
-    #             out = lib.alloc_on_gpu(1)
-    #             lib.launch_sum(a.data, out, a.size)
-    #             shape = a.shape if keepdims else (1,)
+    lib.launch_sum.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+    lib.launch_sum_axis0.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+    lib.launch_sum_axis1.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+    def sum(self, axis=None, keepdims=False):
+        if self.device == 'cuda':    
+            if axis is None:
+                out = lib.alloc_on_gpu(1)
+                lib.launch_sum(self.data, out, self.size)
+                shape = (1,1) if keepdims else (1,)
 
-    #         elif axis == 0:
-    #             N, M = a.shape
-    #             out = lib.alloc_on_gpu(M)
-    #             lib.launch_sum_axis0(a.data, out, N, M)
-    #             shape = (1,M) if keepdims else (M,) 
+            elif axis == 0:
+                N, M = self.shape
+                out = lib.alloc_on_gpu(M)
+                lib.launch_sum_axis0(self.data, out, N, M)
+                shape = (1,M) if keepdims else (M,) 
                 
-    #         elif axis == 1:
-    #             N, M = a.shape
-    #             out = lib.alloc_on_gpu(N)
-    #             lib.launch_sum_axis1(a.data, out, N, M)
-    #             shape = (N, 1) if keepdims else (N,)
-    #         else:
-    #             raise ValueError(f"不支持的 axis: {axis}")
+            elif axis == 1:
+                N, M = self.shape
+                out = lib.alloc_on_gpu(N)
+                lib.launch_sum_axis1(self.data, out, N, M)
+                shape = (N, 1) if keepdims else (N,)
+            else:
+                raise ValueError(f"不支持的 axis: {axis}")
             
-    #         return Ops.tensor(out, device=a.device, op='sum', shape=shape)
-    #     else:
-    #         d = a.data.sum(axis=axis, keepdims=keepdims)
-    #         return Ops.tensor(d, device=a.device, op='sum')
+            return RawTensor(out, device=self.device, shape=shape)
+        else:
+            d = self.data.sum(axis=axis, keepdims=keepdims)
+            return RawTensor(d, device=self.device)
 
 
-    # lib.launch_fill.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
-    # @staticmethod
-    # def ones_like(a):
-    #     if a.device == 'cuda':
-    #         sz = a.size
-    #         out = lib.alloc_on_gpu(sz)
-    #         lib.launch_fill(out, 1, sz)
-    #         return Ops.tensor(out, device='cuda', op='ones_like', shape=a.shape)
-    #     else:
-    #         d = np.ones_like(a)
-    #         return Ops.tensor(d, device='cpu', op='ones_like')
+    lib.launch_fill.argtypes = [ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
+    @staticmethod
+    def ones_like(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = lib.alloc_on_gpu(sz)
+            lib.launch_fill(out, 1, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            d = np.ones_like(a)
+            return RawTensor(d, device=a.device)
 
 
     # @staticmethod
