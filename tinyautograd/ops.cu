@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #include <iostream>
 
 extern "C" float* move_to_gpu(float *a, int n) {
@@ -60,7 +61,7 @@ extern "C" void add_vec(const float *a, const float *b, float *c, int n) {
     int block = 1024;
     int grid = (n + block - 1) / block;
     elementwise_kernel<<<grid, block>>>(a, b, c, n, AddOp());
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 
@@ -73,14 +74,14 @@ extern "C" void add_vec_broadcast(
     elementwise_broadcast_kernel<<<grid, block>>>(
         a, b, c, total_size, b_stride, b_dim, AddOp()
     );
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 extern "C" void mul_vec(const float *a, const float *b, float *c, int n) {
     int block = 1024;
     int grid = (n + block - 1) / block;
     elementwise_kernel<<<grid, block>>>(a, b, c, n, MulOp());
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 
@@ -93,7 +94,7 @@ extern "C" void mul_vec_broadcast(
     elementwise_broadcast_kernel<<<grid, block>>>(
         a, b, c, total_size, b_stride, b_dim, MulOp()
     );
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 
@@ -180,11 +181,11 @@ __global__ void power_kernel(const float* x, float* y, float p, int n) {
     }
 }
 
-extern "C" void launch_power(const float* x, float* y, float p, int n) {
+extern "C" void power(const float* x, float* y, float p, int n) {
     int block = 1024;
     int grid = (n + block - 1) / block;
     power_kernel<<<grid, block>>>(x, y, p, n);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 
@@ -195,11 +196,11 @@ __global__ void power_local_grad_kernel(const float* x, float* grad, float p, in
     }
 }
 
-extern "C" void launch_power_grad(const float* x, float* grad, float p, int n) {
+extern "C" void power_grad(const float* x, float* grad, float p, int n) {
     int block = 1024;
     int grid = (n + block - 1) / block;
     power_local_grad_kernel<<<grid, block>>>(x, grad, p, n);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 }
 
 
@@ -225,7 +226,7 @@ __global__ void reduce_sum_kernel(const float *input, float *output, int n) {
     }
 }
 
-extern "C" void launch_sum(float *d_input, float *d_output, int n) {
+extern "C" void sum(float *d_input, float *d_output, int n) {
     int threads = 256;
     int blocks = (n + threads - 1) / threads;
 
@@ -258,7 +259,7 @@ __global__ void sum_axis0_kernel(const float *input, float *output, int N, int M
     output[col] = sum;
 }
 
-extern "C" void launch_sum_axis0(const float *d_input, float *d_output, int N, int M) {
+extern "C" void sum_axis0(const float *d_input, float *d_output, int N, int M) {
     int blockSize = 256;
     int gridSize = (M + blockSize - 1) / blockSize;
     sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
@@ -277,7 +278,7 @@ extern "C" void launch_sum_axis0(const float *d_input, float *d_output, int N, i
 //     output[row] = sum;
 // }
 
-// extern "C" void launch_sum_axis1(const float *d_input, float *d_output, int N, int M) {
+// extern "C" void sum_axis1(const float *d_input, float *d_output, int N, int M) {
 //     int blockSize = 256;
 //     int gridSize = (N + blockSize - 1) / blockSize;
 //     sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
@@ -323,7 +324,7 @@ __global__ void reduce_axis1_stage2(const float* partial, float* output, int N, 
 }
 
 
-extern "C" void launch_sum_axis1(const float* d_input, float* d_output, int N, int M) {
+extern "C" void sum_axis1(const float* d_input, float* d_output, int N, int M) {
     int stride = 1024;
     int num_seg = (M + stride - 1) / stride;
     int threads = 256;
@@ -347,8 +348,85 @@ __global__ void fill_kernel(float *data, float value, int n) {
 }
 
 
-extern "C" void launch_fill(float *d_data, float value, int n) {
+extern "C" void fill(float *d_data, float value, int n) {
     int blockSize = 256;
     int gridSize = (n + blockSize - 1) / blockSize;
     fill_kernel<<<gridSize, blockSize>>>(d_data, value, n);
+}
+
+__global__ void print(float *a, float *b) {
+    printf("%.2f %.2f %.2f %.2f\n", a[0], a[1], a[2], a[3]);
+    printf("%.2f %.2f %.2f %.2f\n", b[0], b[1], b[2], b[3]);
+}
+
+
+extern "C" void matmul(float *mat_a, float *mat_b, float *mat_c, int M, int N, int K) {
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+
+    const float alpha = 1.0f, beta = 0.0f;
+
+    // Correct parameters for C = A * B where A, B, C are row-major.
+    // This is achieved by computing C^T = B^T * A^T using cublasSgemm (which is column-major).
+    // So, d_mat_b (which holds B) acts as the first matrix (B^T)
+    // and d_mat_a (which holds A) acts as the second matrix (A^T).
+    cublasSgemm(
+        handle,
+        CUBLAS_OP_N, // First operand (d_mat_b, which is B) is treated as B^T (column-major). No transpose needed from cuBLAS.
+        CUBLAS_OP_N, // Second operand (d_mat_a, which is A) is treated as A^T (column-major). No transpose needed from cuBLAS.
+        N,           // Result matrix (C^T) rows: N (original C's columns)
+        M,           // Result matrix (C^T) columns: M (original C's rows)
+        K,           // Inner dimension: K
+        &alpha,
+        mat_b,       // Pointer to B (KxN row-major)
+        N,           // Leading dimension of B: N (original column count of B)
+        mat_a,       // Pointer to A (MxK row-major)
+        K,           // Leading dimension of A: K (original column count of A)
+        &beta,
+        mat_c,       // Pointer to C (MxN row-major, will be filled as C^T in column-major)
+        N);          // Leading dimension of C^T: N (original column count of C)
+
+    cublasDestroy(handle);
+}
+
+
+// Tile 大小
+#define TILE_DIM 32
+#define BLOCK_ROWS 8
+
+__global__ void transpose_shared(const float* __restrict__ input, float* __restrict__ output, int M, int N) {
+    __shared__ float tile[TILE_DIM][TILE_DIM + 1];  
+    // +1 是为了避免共享内存bank conflict
+
+    int x = blockIdx.x * TILE_DIM + threadIdx.x;  // 列索引
+    int y = blockIdx.y * TILE_DIM + threadIdx.y;  // 行索引
+
+    // 先读入 tile 中，注意分多行读完tile（threadIdx.y < BLOCK_ROWS）
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS) {
+        if ((y + j) < M && x < N) {
+            tile[threadIdx.y + j][threadIdx.x] = input[(y + j) * N + x];
+        }
+    }
+
+    __syncthreads();
+
+    // 计算转置后的位置
+    x = blockIdx.y * TILE_DIM + threadIdx.x;  // 转置后 x,y 交换
+    y = blockIdx.x * TILE_DIM + threadIdx.y;
+
+    // 写回输出矩阵，分多行写
+    for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS) {
+        if ((y + j) < N && x < M) {
+            output[(y + j) * M + x] = tile[threadIdx.x][threadIdx.y + j];
+        }
+    }
+}
+
+extern "C" void transpose_matrix(float *mat_a, float *mat_c, int M, int N) {
+    dim3 blockDim(TILE_DIM, BLOCK_ROWS);
+    dim3 gridDim((N + TILE_DIM - 1) / TILE_DIM, (M + TILE_DIM - 1) / TILE_DIM);
+
+    transpose_shared<<<gridDim, blockDim>>>(mat_a, mat_c, M, N);
+
+    // // cudaDeviceSynchronize();
 }

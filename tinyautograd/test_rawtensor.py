@@ -1,6 +1,7 @@
 from .rawtensor import RawTensor
 import numpy as np
 import time
+import random
 
 def assert_equal(res, res_g):
     assert np.allclose(res.data, res_g.data, rtol=1e-5, atol=1e-8)
@@ -293,3 +294,48 @@ def test_ones_like():
     nb = np.ones_like(na)
     print(nb)
     print(nb.shape)
+
+
+def test_matmul():
+    for i in range(1000):
+        M = random.randint(1, 64)
+        K = random.randint(1, 64)
+        N = random.randint(1, 64)
+
+        a_np = np.random.randint(-10, 10, size=(M, K), dtype=np.int32)
+        b_np = np.random.randint(-10, 10, size=(K, N), dtype=np.int32)
+
+        # CPU matmul
+        ta = RawTensor(a_np)
+        tb = RawTensor(b_np)
+        res_cpu = ta @ tb
+
+        # GPU matmul
+        ta.to('cuda')
+        tb.to('cuda')
+        res_gpu = ta @ tb
+        res_gpu.to('cpu')
+
+        try:
+            assert_equal(res_cpu, res_gpu)
+        except AssertionError as e:
+            print(f"Mismatch at case {i}: shape a={a_np.shape}, b={b_np.shape}")
+            raise e
+
+
+def test_transpose_matrix():
+    for i in range(1000):
+        M = random.randint(1, 64)
+        N = random.randint(1, 64)
+
+        a = np.random.randint(-10, 10, size=(M, N), dtype=np.int32)
+
+        # a = [[1, 2, 3], [4, 5, 6]]
+        ta = RawTensor(a)
+        res_cpu = ta.T
+
+        ta.to('cuda')
+        res_gpu = ta.T
+        res_gpu.to('cpu')
+        
+        assert_equal(res_cpu, res_gpu)

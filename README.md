@@ -5,6 +5,8 @@ TinyAutoGrad is an automatic differentiation engine and neural network library i
 python -m samples.mnist.mnist 
 
 # cuda 🚧
-nvcc -shared -o libops.so tinyautograd/ops.cu  -Xcompiler -fPIC
+nvcc -shared -o libops.so tinyautograd/ops.cu  -Xcompiler -fPIC -lcublas
 
 python -m samples.mnist.mnist-cuda
+
+pytest tinyautograd/test_rawtensor.py -s -v --cache-clear
