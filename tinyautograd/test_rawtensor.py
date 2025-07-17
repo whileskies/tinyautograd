@@ -339,3 +339,17 @@ def test_transpose_matrix():
         res_gpu.to('cpu')
         
         assert_equal(res_cpu, res_gpu)
+
+
+def test_relu():
+    a = [1, -2, 3, -4, 5]
+    ta = RawTensor(a)
+    res_cpu = RawTensor.relu(ta)
+    # print(res_cpu.data)
+    ta.to('cuda')
+    res_gpu = RawTensor.relu(ta)
+    res_gpu.to('cpu')
+    # print(res_gpu.data)
+    assert_equal(res_cpu, res_gpu)
+    
+    

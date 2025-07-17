@@ -2,6 +2,8 @@
 #include <cublas_v2.h>
 #include <iostream>
 
+#define BLOCK_SZ 256
+
 extern "C" float* move_to_gpu(float *a, int n) {
     float *d_a;
     cudaMalloc((void **)&d_a, n * sizeof(float));
@@ -12,6 +14,10 @@ extern "C" float* move_to_gpu(float *a, int n) {
 extern "C" void move_to_cpu(float* a, float* d_a, int n) {
     cudaMemcpy(a, d_a, n * sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(d_a);
+}
+
+extern "C" void copy_to_cpu(float* a, float* d_a, int n) {
+    cudaMemcpy(a, d_a, n * sizeof(float), cudaMemcpyDeviceToHost);
 }
 
 extern "C" float* alloc_on_gpu(int n) {
@@ -58,7 +64,7 @@ __global__ void elementwise_broadcast_kernel(const float *a, const float *b, flo
 
 
 extern "C" void add_vec(const float *a, const float *b, float *c, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     elementwise_kernel<<<grid, block>>>(a, b, c, n, AddOp());
     // cudaDeviceSynchronize();
@@ -69,7 +75,7 @@ extern "C" void add_vec_broadcast(
     const float *a, const float *b, float *c,
     int total_size, int b_stride, int b_dim)
 {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (total_size + block - 1) / block;
     elementwise_broadcast_kernel<<<grid, block>>>(
         a, b, c, total_size, b_stride, b_dim, AddOp()
@@ -78,7 +84,7 @@ extern "C" void add_vec_broadcast(
 }
 
 extern "C" void mul_vec(const float *a, const float *b, float *c, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     elementwise_kernel<<<grid, block>>>(a, b, c, n, MulOp());
     // cudaDeviceSynchronize();
@@ -89,7 +95,7 @@ extern "C" void mul_vec_broadcast(
     const float *a, const float *b, float *c,
     int total_size, int b_stride, int b_dim)
 {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (total_size + block - 1) / block;
     elementwise_broadcast_kernel<<<grid, block>>>(
         a, b, c, total_size, b_stride, b_dim, MulOp()
@@ -138,37 +144,37 @@ struct TanhGradOp {
 };
 
 extern "C" void launch_relu(const float *x, float *y, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, ReluOp());
 }
 
 extern "C" void launch_relu_grad(const float *x, float *y, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, ReluGradOp());
 }
 
 extern "C" void launch_log(const float *x, float *y, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, LogOp());
 }
 
 extern "C" void launch_log_grad(const float *x, float *y, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, LogGradOp());
 }
 
 extern "C" void launch_tanh(const float *x, float *y, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, TanhOp());
 }
 
 extern "C" void launch_tanh_grad(const float *x, float *y, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, TanhGradOp());
 }
@@ -182,7 +188,7 @@ __global__ void power_kernel(const float* x, float* y, float p, int n) {
 }
 
 extern "C" void power(const float* x, float* y, float p, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     power_kernel<<<grid, block>>>(x, y, p, n);
     // cudaDeviceSynchronize();
@@ -197,7 +203,7 @@ __global__ void power_local_grad_kernel(const float* x, float* grad, float p, in
 }
 
 extern "C" void power_grad(const float* x, float* grad, float p, int n) {
-    int block = 1024;
+    int block = BLOCK_SZ;
     int grid = (n + block - 1) / block;
     power_local_grad_kernel<<<grid, block>>>(x, grad, p, n);
     // cudaDeviceSynchronize();
@@ -325,7 +331,7 @@ __global__ void reduce_axis1_stage2(const float* partial, float* output, int N, 
 
 
 extern "C" void sum_axis1(const float* d_input, float* d_output, int N, int M) {
-    int stride = 1024;
+    int stride = BLOCK_SZ;
     int num_seg = (M + stride - 1) / stride;
     int threads = 256;
 

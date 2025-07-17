@@ -1,21 +1,11 @@
-import numpy as np
-import ctypes
-# from . import Ops
+from .rawtensor import *
 
 class Tensor:
-    def __init__(self, data, op='', requires_grad=False, label='', device='cpu', shape=None):
-        if device == 'cpu':
-            self._data = np.array(data, dtype=np.float32)
-            self._shape = self._data.shape
-            self._device = 'cpu'
-        elif device == 'cuda':
+    def __init__(self, data, op='', requires_grad=False):
+        if isinstance(data, RawTensor):
             self._data = data
-            self._shape = shape
-            self._device = 'cuda'
         else:
-            raise ValueError(f"不支持的设备类型：{device}")
-
-        self._label = label
+            self._data = RawTensor(data)
         self._op = op
         self._grad = None
         self._requires_grad = requires_grad
@@ -24,23 +14,19 @@ class Tensor:
 
 
     def __repr__(self):
-        return f"Tensor(lable={self._label}, op={self._op}, shape={self._shape})"
+        return f"Tensor(op={self._op}, shape={self._shape})"
     
     @property
     def data(self):
-        return self._data
+        return self._data.npdata
     
-    @data.setter
-    def data(self, data):
-        self._data = data
-    
-    @property
-    def label(self):
-        return self._label
+    # @data.setter
+    # def data(self, data):
+    #     self._data = data
     
     @property
     def shape(self):
-        return self._shape
+        return self._data.shape
     
     @property
     def grad(self):
@@ -48,30 +34,26 @@ class Tensor:
     
     @property
     def size(self):
-        return np.prod(self._shape)
+        return self._data.size
     
     @property
     def device(self):
-        return self._device
+        return self._data.device
 
     @property
     def requires_grad(self):
         return self._requires_grad 
     
     
-    
     def to(self, device):
         if device not in ["cpu", "cuda"]:
             raise ValueError("Unsupported device. Choose 'cpu' or 'cuda'.")
-        if self._device == device:
-            return self
         
-        self._data = Ops.to_device(self, device)
-        self._device = device
+        self._data.to(device)
 
         return self
 
-    
+
     def _add_grad(self, grad):
         if self._grad is None:
             self._grad = grad
@@ -80,7 +62,7 @@ class Tensor:
     
     def backward(self):
         if self._grad is None:
-            self._grad = np.ones_like(self._data)
+            self._grad = RawTensor.ones_like(self._data)
         
         topo, visited = [], set()
 
@@ -97,33 +79,33 @@ class Tensor:
         for node in reversed(topo):
             node._backward()
 
-    def _unbroadcast(self, grad, shape):
-        """将梯度 grad 还原成目标 shape（用于广播反向传播）"""
+    # def _unbroadcast(self, grad, shape):
+    #     """将梯度 grad 还原成目标 shape（用于广播反向传播）"""
 
-        # while len(grad.shape) > len(shape):
-        #     grad = grad.sum(axis=0)
-        # for i, (g_dim, s_dim) in enumerate(zip(grad.shape, shape)):
-        #     if s_dim == 1 and g_dim != 1:
-        #         grad = grad.sum(axis=i, keepdims=True)
-        if grad.shape[0] != shape[0]:
-            return np.sum(grad, axis=0, keepdims=True)
-        else:
-            return grad
+    #     # while len(grad.shape) > len(shape):
+    #     #     grad = grad.sum(axis=0)
+    #     # for i, (g_dim, s_dim) in enumerate(zip(grad.shape, shape)):
+    #     #     if s_dim == 1 and g_dim != 1:
+    #     #         grad = grad.sum(axis=i, keepdims=True)
+    #     if grad.shape[0] != shape[0]:
+    #         return np.sum(grad, axis=0, keepdims=True)
+    #     else:
+    #         return grad
 
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Ops.add(self, other)
-        # out = Tensor(Ops.add(self, other), op='add', requires_grad=self._requires_grad or other._requires_grad)
+        out = Tensor(self._data + other._data, op='add', requires_grad=self._requires_grad or other._requires_grad)
         out._prev = {self, other}
-        out._requires_grad = self._requires_grad or other._requires_grad
 
         def _backward():
             if self._requires_grad:
-                grad = self._unbroadcast(out._grad, self._data.shape)
+                # grad = self._unbroadcast(out._grad, self._data.shape)
+                grad = out._grad
                 self._add_grad(grad)
             if other._requires_grad:
-                grad = self._unbroadcast(out._grad, other._data.shape)
+                # grad = self._unbroadcast(out._grad, other._data.shape)
+                grad = out._grad
                 other._add_grad(grad)
         out._backward = _backward
 
@@ -132,20 +114,20 @@ class Tensor:
     def __radd__(self, other):
         return self + other
 
+
     def __mul__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Ops.mul(self, other)
-        # out = Tensor(self._data * other._data, op='mul', requires_grad=self._requires_grad or other._requires_grad)
+        other.to(self.device)
+        out = Tensor(self._data * other._data, op='mul', requires_grad=self._requires_grad or other._requires_grad)
         out._prev = {self, other}
-        out._requires_grad = self._requires_grad or other._requires_grad
 
         def _backward():
             if self._requires_grad:
                 grad = other._data * out._grad
-                self._grad = self._grad + grad if self._grad is not None else grad
+                self._add_grad(grad)
             if other._requires_grad:
                 grad = self._data * out._grad
-                other._grad = other._grad + grad if other._grad is not None else grad
+                other._add_grad(grad)
 
         out._backward = _backward
         return out
@@ -161,51 +143,50 @@ class Tensor:
     
     def __pow__(self, power):
         assert isinstance(power, (int, float)), "only supporting int/float powers for now"
-        # out = Tensor(self._data**power, op='pow', requires_grad=self._requires_grad)
-        out = Ops.pow(self)
+        out = Tensor(self._data**power, op='pow', requires_grad=self._requires_grad)
         out._prev = {self}
         out._requires_grad = self._requires_grad
 
         def _backward():
             if self._requires_grad:
-                grad = power*(self._data**(power-1)) * out._grad
-                self._grad = self._grad + grad if self._grad is not None else grad
+                # grad = power*(self._data**(power-1)) * out._grad
+                grad = RawTensor.pow_grad(self._data, power) * out._grad
+                # self._grad = self._grad + grad if self._grad is not None else grad
+                self._add_grad(grad)
         
         out._backward = _backward
 
         return out
     
-    def __truediv__(self, other):
-        return self * other**-1
+    # def __truediv__(self, other):
+    #     return self * other**-1
     
-    def matmul(self, other):
-        # out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
-        out = Ops.matmul(self, other)
-        out._prev = {self, other}
-        out._requires_grad = self._requires_grad or other._requires_grad
+    # def matmul(self, other):
+    #     # out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
+    #     out = Ops.matmul(self, other)
+    #     out._prev = {self, other}
+    #     out._requires_grad = self._requires_grad or other._requires_grad
 
-        def _backward():
-            if self._requires_grad:
-                grad = out._grad @ other._data.T
-                self._add_grad(grad)
-            if other._requires_grad:
-                grad = self._data.T @ out._grad
-                other._add_grad(grad)
-        out._backward = _backward
+    #     def _backward():
+    #         if self._requires_grad:
+    #             grad = out._grad @ other._data.T
+    #             self._add_grad(grad)
+    #         if other._requires_grad:
+    #             grad = self._data.T @ out._grad
+    #             other._add_grad(grad)
+    #     out._backward = _backward
 
-        return out
+    #     return out
 
 
     def sum(self):
-        # out = Tensor(self._data.sum(), op='sum', requires_grad=self._requires_grad)
-        out = Ops.sum(self)
+        out = Tensor(self._data.sum(), op='sum', requires_grad=self._requires_grad)
         out._prev = {self}
-        out._requires_grad = self._requires_grad
         
         def _backward():
             if self._requires_grad:
-                grad = np.ones_like(self._data) * out._grad
-                self._grad = self._grad + grad if self._grad is not None else grad
+                grad = RawTensor.ones_like(self._data) * out._grad
+                self._add_grad(grad)
 
         out._backward = _backward
 
@@ -224,10 +205,10 @@ class Tensor:
 
     #     return out
     
-    def __del__(self):
-        if self._device == "cuda":
-            if self.data is not None:
-                # print("free gpu memory")
-                Ops.free_gpu_memory(self.data)
-            # if self.grad is not None:
-            #     free_gpu_memory(self.grad.data)
+    # def __del__(self):
+    #     if self._device == "cuda":
+    #         if self.data is not None:
+    #             # print("free gpu memory")
+    #             Ops.free_gpu_memory(self.data)
+    #         # if self.grad is not None:
+    #         #     free_gpu_memory(self.grad.data)

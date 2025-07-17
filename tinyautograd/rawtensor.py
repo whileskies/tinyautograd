@@ -11,6 +11,7 @@ cuda.alloc_on_gpu.restype = ctypes.c_void_p
 cuda.move_to_gpu.argtypes = [ctypes.c_void_p, ctypes.c_int]
 cuda.move_to_gpu.restype = ctypes.c_void_p
 cuda.move_to_cpu.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+cuda.copy_to_cpu.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
 cuda.free_gpu_memory.argtypes = [ctypes.c_void_p]
 
 
@@ -33,11 +34,12 @@ class RawTensor:
     
     def __del__(self):
         if self.device == 'cuda':
+            # print('del')
             cuda.free_gpu_memory(self.data)
         
     
     @staticmethod
-    def device(a, b):
+    def _device(a, b):
         assert a.device == b.device, "Tensor a and b devices are not the same"
         return a.device
     
@@ -45,7 +47,6 @@ class RawTensor:
     def size(self):
         return np.prod(self.shape)
     
-
     def to(self, device):
         if self.device == device:
             return
@@ -67,6 +68,19 @@ class RawTensor:
             raise  ValueError(f"Unsupported device: {device}")
         return self
 
+
+    @property
+    def npdata(self):
+        if self.device == 'cuda':
+            n = self.size
+            host_buffer = np.empty(n, dtype=np.float32)
+            host_ptr = host_buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+            src_ptr = self.data
+            cuda.copy_to_cpu(host_ptr, src_ptr, n)
+            host_buffer = np.reshape(host_buffer, self.shape)
+            return host_buffer
+        else:
+            return self.data
     
     # @staticmethod
     # def broadcast_shape(shape_a, shape_b):
@@ -105,7 +119,7 @@ class RawTensor:
                 other.to('cuda')
         
         a, b = self, other
-        if RawTensor.device(a, b) == 'cuda':
+        if RawTensor._device(a, b) == 'cuda':
             if a.size < b.size:
                 a, b = b, a
             
@@ -147,7 +161,7 @@ class RawTensor:
                 other.to('cuda')
 
         a, b = self, other
-        if RawTensor.device(a, b) == 'cuda':
+        if RawTensor._device(a, b) == 'cuda':
             if a.size < b.size:
                 a, b = b, a
             
@@ -197,18 +211,18 @@ class RawTensor:
             return RawTensor(r, device=self.device)
 
    
-    # cuda.power_grad.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
-    # @staticmethod
-    # def pow_grad(a, b):
-    #     if a.device == 'cuda':
-    #         fb = float(b)
-    #         out = cuda.alloc_on_gpu(a.size)
-    #         cuda.power_grad(a.data, out, fb, a.size)
+    cuda.power_grad.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
+    @staticmethod
+    def pow_grad(a, b):
+        if a.device == 'cuda':
+            fb = float(b)
+            out = cuda.alloc_on_gpu(a.size)
+            cuda.power_grad(a.data, out, fb, a.size)
 
-    #         return Ops.tensor(out, device=a.device, op='**-grad', shape=a.shape)
-    #     else:
-    #         grad = b * (a.data ** (b - 1))
-    #         return Ops.tensor(grad, device=a.device, op='**-grad')
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            grad = b * (a.data ** (b - 1))
+            return RawTensor(grad, device=a.device)
 
 
     cuda.sum.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
@@ -250,7 +264,7 @@ class RawTensor:
             cuda.fill(out, 1, sz)
             return RawTensor(out, device=a.device, shape=a.shape)
         else:
-            d = np.ones_like(a)
+            d = np.ones_like(a.data)
             return RawTensor(d, device=a.device)
 
     cuda.matmul.argtypes = [
@@ -267,7 +281,7 @@ class RawTensor:
         # print(M, N, K)
         assert K == K2
 
-        if RawTensor.device(self, other) == 'cuda':
+        if RawTensor._device(self, other) == 'cuda':
             out = cuda.alloc_on_gpu(M * N)
             cuda.matmul(self.data, other.data, out, M, N, K)
             return RawTensor(out, device=self.device, shape=(M,N))
@@ -275,6 +289,7 @@ class RawTensor:
         else:
             out = np.matmul(self.data, other.data)
             return RawTensor(out, device=self.device)
+
 
     cuda.transpose_matrix.argtypes = [
         ctypes.c_void_p,
@@ -294,49 +309,106 @@ class RawTensor:
             return RawTensor(self.data.T, device=self.device)
 
 
-    # @staticmethod
-    # def matmul(a, b):
-    #     if Ops.device(a, b) == 'cuda':
-    #         pass
-    #     else:
-    #         c = a.data @ b.data
-    #         return Ops.tensor(c, device=a.device, op='matmul')
-        
-    
-    # # Transpose
-    # @staticmethod  
-    # def T(a):
-    #     if a.device == 'cuda':
-    #         pass
-    #     else:
-    #         return Ops.tensor(a.T, device=a.device, op='T')
-        
-
-    # @staticmethod
-    # def relu(a):
-    #     if a.device == 'cuda':
-    #         pass
-    #     else:
-    #         r = np.maximum(0, a.data)
-    #         return Ops.tensor(r, device=a.device, op='relu')
-        
-    # @staticmethod
-    # def log(a):
-    #     if a.device == 'cuda':
-    #         pass
-    #     else:
-    #         r = np.log(a.data)
-    #         return Ops.tensor(r, device=a.device, op='log')
+    cuda.launch_relu.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def relu(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_relu(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            r = np.maximum(0, a.data)
+            return RawTensor(r, device=a.device)
         
 
-    # @staticmethod
-    # def tanh(a):
-    #     if a.device == 'cuda':
-    #         pass
-    #     else:
-    #         r = np.tanh(a.data)
-    #         return Ops.tensor(r, device=a.device, op='tanh')
+    cuda.launch_relu_grad.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def relu_grad(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_relu_grad(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            grad = (a.data > 0).astype(np.float32)
+            return RawTensor(grad, device=a.device)
         
+
+    cuda.launch_log.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def log(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_log(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            r = np.log(a.data)
+            return RawTensor(r, device=a.device)
+
+    cuda.launch_log_grad.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def log_grad(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_log_grad(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            grad = (1 / a.data)
+            return RawTensor(grad, device=a.device)    
+
+
+    cuda.launch_tanh.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def tanh(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_tanh(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            r = np.tanh(a.data)
+            return RawTensor(r, device=a.device)
+
+    cuda.launch_tanh_grad.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def tanh_grad(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_tanh_grad(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            t = np.tanh(a.data)
+            grad = (1 - t ** 2)
+            return RawTensor(grad, device=a.device) 
+
     
     # @staticmethod
     # def sigmod(a):
