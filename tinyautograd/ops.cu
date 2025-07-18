@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <iostream>
+#include <cfloat>
 
 #define BLOCK_SZ 256
 
@@ -138,8 +139,25 @@ struct TanhOp {
 
 struct TanhGradOp {
     __device__ float operator()(float x) const {
-        float t = tanhf(x);
-        return 1.0f - t * t;
+        return 1.0f - x * x;  // x = tanhf(x) already
+    }
+};
+
+struct SigmoidOp {
+    __device__ float operator()(float x) const {
+        return 1.0f / (1.0f + expf(-x));
+    }
+};
+
+struct SigmoidGradOp {
+    __device__ float operator()(float x) const {
+        return x * (1.0f - x);  // x = sigmoid(x) already
+    }
+};
+
+struct ExpOp {
+    __device__ float operator()(float x) const {
+        return expf(x);  
     }
 };
 
@@ -179,6 +197,23 @@ extern "C" void launch_tanh_grad(const float *x, float *y, int n) {
     unary_elementwise_kernel<<<grid, block>>>(x, y, n, TanhGradOp());
 }
 
+extern "C" void launch_sigmoid(const float *x, float *y, int n) {
+    int block = BLOCK_SZ;
+    int grid = (n + block - 1) / block;
+    unary_elementwise_kernel<<<grid, block>>>(x, y, n, SigmoidOp());
+}
+
+extern "C" void launch_sigmoid_grad(const float *x, float *y, int n) {
+    int block = BLOCK_SZ;
+    int grid = (n + block - 1) / block;
+    unary_elementwise_kernel<<<grid, block>>>(x, y, n, SigmoidGradOp());
+}
+
+extern "C" void launch_exp(const float *x, float *y, int n) {
+    int block = BLOCK_SZ;
+    int grid = (n + block - 1) / block;
+    unary_elementwise_kernel<<<grid, block>>>(x, y, n, ExpOp());
+}
 
 __global__ void power_kernel(const float* x, float* y, float p, int n) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -266,29 +301,11 @@ __global__ void sum_axis0_kernel(const float *input, float *output, int N, int M
 }
 
 extern "C" void sum_axis0(const float *d_input, float *d_output, int N, int M) {
-    int blockSize = 256;
+    int blockSize = BLOCK_SZ;
     int gridSize = (M + blockSize - 1) / blockSize;
     sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
 }
 
-
-// __global__ void sum_axis1_kernel(const float *input, float *output, int N, int M) {
-//     int row = blockIdx.x * blockDim.x + threadIdx.x;
-//     if (row >= N) return;
-
-//     float sum = 0;
-//     for (int col = 0; col < M; col++) {
-//         sum += input[row * M + col];
-//     }
-
-//     output[row] = sum;
-// }
-
-// extern "C" void sum_axis1(const float *d_input, float *d_output, int N, int M) {
-//     int blockSize = 256;
-//     int gridSize = (N + blockSize - 1) / blockSize;
-//     sum_axis0_kernel<<<gridSize, blockSize>>>(d_input, d_output, N, M);
-// }
 
 __global__ void reduce_axis1_stage1(const float* input, float* partial, int N, int M, int stride) {
     int row = blockIdx.y;
@@ -355,7 +372,7 @@ __global__ void fill_kernel(float *data, float value, int n) {
 
 
 extern "C" void fill(float *d_data, float value, int n) {
-    int blockSize = 256;
+    int blockSize = BLOCK_SZ;
     int gridSize = (n + blockSize - 1) / blockSize;
     fill_kernel<<<gridSize, blockSize>>>(d_data, value, n);
 }
@@ -436,3 +453,96 @@ extern "C" void transpose_matrix(float *mat_a, float *mat_c, int M, int N) {
 
     // // cudaDeviceSynchronize();
 }
+
+
+__global__ void softmax_kernel_simple(const float *logits, float *probs, int B, int C) {
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+
+    if (row >= B) return;
+
+    const float *row_logits = logits + row * C;
+    float *row_probs = probs + row * C;
+
+    // Step 1: 找最大值
+    float max_val = -FLT_MAX;
+    for (int i = tid; i < C; i += blockDim.x) {
+        float val = row_logits[i];
+        max_val = fmaxf(max_val, val);
+    }
+
+    // warp reduce max (简化，无 __shared__)
+    for (int offset = 16; offset > 0; offset /= 2)
+        max_val = fmaxf(max_val, __shfl_xor_sync(0xffffffff, max_val, offset));
+
+    // Step 2: 计算 exp 和 sum
+    float sum_exp = 0.0f;
+    for (int i = tid; i < C; i += blockDim.x) {
+        float e = __expf(row_logits[i] - max_val);
+        row_probs[i] = e;
+        sum_exp += e;
+    }
+
+    // warp reduce sum
+    for (int offset = 16; offset > 0; offset /= 2)
+        sum_exp += __shfl_xor_sync(0xffffffff, sum_exp, offset);
+
+    // Step 3: 归一化
+    for (int i = tid; i < C; i += blockDim.x) {
+        row_probs[i] = row_probs[i] / sum_exp;
+    }
+}
+
+__global__ void cross_entropy_loss_kernel_simple(const float *probs, const float *target, float *loss, int B, int C) {
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+
+    if (row >= B) return;
+
+    const float *row_probs = probs + row * C;
+    const float *row_target = target + row * C;
+
+    float local_loss = 0.0f;
+    for (int i = tid; i < C; i += blockDim.x) {
+        float t = row_target[i];
+        float p = row_probs[i];
+        local_loss += -t * logf(p + 1e-9f);
+    }
+
+    // warp reduce loss
+    for (int offset = 16; offset > 0; offset /= 2)
+        local_loss += __shfl_xor_sync(0xffffffff, local_loss, offset);
+
+    if (tid == 0)
+        loss[row] = local_loss;
+}
+
+extern "C" void launch_softmax_simple(const float *logits, float *probs, int B, int C) {
+    dim3 grid(B);
+    dim3 block(32);  // warp size
+    softmax_kernel_simple<<<grid, block>>>(logits, probs, B, C);
+}
+
+extern "C" void launch_cross_entropy_loss_simple(const float *probs, const float *target, float *loss, int B, int C) {
+    dim3 grid(B);
+    dim3 block(32);
+    cross_entropy_loss_kernel_simple<<<grid, block>>>(probs, target, loss, B, C);
+}
+
+
+
+__global__ void softmax_cross_entropy_grad(const float *probs, const float *target, float *grad, int B, int C) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int total = B * C;
+    if (idx >= total) return;
+
+    grad[idx] = probs[idx] - target[idx];
+}
+
+extern "C" void launch_softmax_cross_entropy_grad(const float *probs, const float *target, float *grad, int B, int C) {
+    int total = B * C;
+    int block = BLOCK_SZ;
+    int grid = (total + block - 1) / block;
+    softmax_cross_entropy_grad<<<grid, block>>>(probs, target, grad, B, C);
+}
+

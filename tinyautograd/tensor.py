@@ -149,34 +149,32 @@ class Tensor:
 
         def _backward():
             if self._requires_grad:
-                # grad = power*(self._data**(power-1)) * out._grad
                 grad = RawTensor.pow_grad(self._data, power) * out._grad
-                # self._grad = self._grad + grad if self._grad is not None else grad
                 self._add_grad(grad)
         
         out._backward = _backward
 
         return out
     
-    # def __truediv__(self, other):
-    #     return self * other**-1
+    def __truediv__(self, other):
+        other = float(other)
+        return self * other**-1
     
-    # def matmul(self, other):
-    #     # out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
-    #     out = Ops.matmul(self, other)
-    #     out._prev = {self, other}
-    #     out._requires_grad = self._requires_grad or other._requires_grad
 
-    #     def _backward():
-    #         if self._requires_grad:
-    #             grad = out._grad @ other._data.T
-    #             self._add_grad(grad)
-    #         if other._requires_grad:
-    #             grad = self._data.T @ out._grad
-    #             other._add_grad(grad)
-    #     out._backward = _backward
+    def matmul(self, other):
+        out = Tensor(self._data @ other._data, requires_grad=self._requires_grad or other._requires_grad)
+        out._prev = {self, other}
 
-    #     return out
+        def _backward():
+            if self._requires_grad:
+                grad = out._grad @ other._data.T
+                self._add_grad(grad)
+            if other._requires_grad:
+                grad = self._data.T @ out._grad
+                other._add_grad(grad)
+        out._backward = _backward
+
+        return out
 
 
     def sum(self):
@@ -193,17 +191,18 @@ class Tensor:
         return out
 
 
-    # def mean(self):
-    #     out = Tensor(self._data.mean(), op='mean', requires_grad=self._requires_grad)
-    #     out._prev = {self}
-        
-    #     def _backward():
-    #         if self._requires_grad:
-    #             grad = np.ones_like(self._data) / self._data.size * out._grad
-    #             self._add_grad(grad)
-    #     out._backward = _backward
+    def mean(self):
+        sz = self._data.size
+        out = Tensor(self._data.sum() / sz, requires_grad=self._requires_grad)
+        out._prev = {self}
+         
+        def _backward():
+            if self._requires_grad:
+                grad = np.ones_like(self._data) / sz * out._grad
+                self._add_grad(grad)
+        out._backward = _backward
 
-    #     return out
+        return out
     
     # def __del__(self):
     #     if self._device == "cuda":

@@ -163,23 +163,235 @@ def test_power_cuda():
 #     print(a.grad)
 
 
-# def test_mse():
-#     a = Tensor([1, 2, 3], requires_grad=True)
-#     b = Tensor([1.1, 2.1, 3.1], requires_grad=True)
-#     y = mse_loss(a, b)
-#     print(y.data)
+def test_mse():
+    a = Tensor([1, 2, 3], requires_grad=True)
+    b = Tensor([1.2, 3, 3.5], requires_grad=True)
+    y = mse_loss(a, b)
+    y.backward()
+    print(y.data)
+    print(a.grad.npdata)
+
+    a2 = Tensor([1.001, 2, 3], requires_grad=True)
+    y2 = mse_loss(a2, b)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0], g)
 
 
-# def test_matmul():
-#     a = Tensor([[1, 2, 3], [1, 2, 3], [1, 2, 3]], requires_grad=True)
-#     b = Tensor([[4, 5, 6], [7, 8, 9], [1, 2, 3]], requires_grad=True)
-#     y = (a.matmul(b)).sum()
-#     print(y.data)
-#     y.backward()
+def test_mse_cuda():
+    a = Tensor([1, 2, 3], requires_grad=True)
+    b = Tensor([1.2, 3, 3.5], requires_grad=True)
+    a.to('cuda')
+    b.to('cuda')
+    y = mse_loss(a, b)
+    y.backward()
+    print(y.data)
+    print(b.grad.npdata)
 
-#     a2 = Tensor([[1.001, 2, 3], [1, 2, 3], [1, 2, 3]], requires_grad=True)
-#     y2 = (a2.matmul(b)).sum()
-#     print(y2.data)
-#     print((y2.data - y.data)/0.001)
-#     print(a.grad[0][0])
-#     assert a.grad[0][0] - y2.data < 1e-2
+    b2 = Tensor([1.2, 3.001, 3.5], requires_grad=True)
+    b2.to('cuda')
+    y2 = mse_loss(a, b2)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(b.grad.npdata[1], g)
+
+def test_matmul():
+    a = Tensor([[1, 2, 3], [1, 2, 3], [1, 2, 3]], requires_grad=True)
+    b = Tensor([[4, 5, 6], [7, 8, 9], [1, 2, 3]], requires_grad=True)
+    y = (a.matmul(b)).sum()
+    y.backward()
+    print(y.data)
+    print(a.grad.npdata)
+    
+
+    a2 = Tensor([[1.001, 2, 3], [1, 2, 3], [1, 2, 3]], requires_grad=True)
+    y2 = (a2.matmul(b)).sum()
+    print(y2.data)
+    g = (y2.data - y.data)/0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0][0], g)
+    # print((y2.data - y.data)/0.001)
+    # print(a.grad[0][0])
+    # assert a.grad[0][0] - y2.data < 1e-2
+
+
+def test_matmul_cuda():
+    a = Tensor([[1, 2, 3], [1, 2, 3]], requires_grad=True)
+    b = Tensor([[4, 5], [7, 8], [1, 2]], requires_grad=True)
+    a.to('cuda')
+    b.to('cuda')
+    y = (a.matmul(b)).sum()
+    y.backward()
+    print(y.data)
+    print(a.grad.npdata)
+    
+
+    a2 = Tensor([[1, 2.001, 3], [1, 2, 3]], requires_grad=True)
+    a2.to('cuda')
+    y2 = (a2.matmul(b)).sum()
+    print(y2.data)
+    g = (y2.data - y.data)/0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0][1], g)
+
+
+def test_relu():
+    a = Tensor([1, -2, 2, 3, -1, -5], requires_grad=True)
+    y = (relu(a) + relu(a) + relu(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([1.001, -2, 2, 3, -1, -5], requires_grad=True)
+    y2 = (relu(a2) + relu(a2) + relu(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0], g)
+
+
+def test_relu_cuda():
+    a = Tensor([1, -2, 2, 3, -1, -5], requires_grad=True)
+    y = (relu(a) + relu(a) + relu(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([1.001, -2, 2, 3, -1, -5], requires_grad=True)
+    y2 = (relu(a2) + relu(a2) + relu(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0], g)
+
+
+def test_log():
+    a = Tensor([0.5, 0.8, 1, 2, 4, 5], requires_grad=True)
+    y = (log(a) + log(a) + log(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([0.5, 0.801, 1, 2, 4, 5], requires_grad=True)
+    y2 = (log(a2) + log(a2) + log(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[1], g)
+
+
+def test_log_cuda():
+    a = Tensor([0.5, 0.8, 1, 2, 4, 5], requires_grad=True)
+    a.to('cuda')
+    y = (log(a) + log(a) + log(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([0.5, 0.801, 1, 2, 4, 5], requires_grad=True)
+    a2.to('cuda')
+    y2 = (log(a2) + log(a2) + log(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[1], g)
+
+
+def test_tanh():
+    a = Tensor([0.1, 0.2, 0.3], requires_grad=True)
+    y = (tanh(a) + tanh(a) + tanh(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([0.101, 0.2, 0.3], requires_grad=True)
+    y2 = (tanh(a2) + tanh(a2) + tanh(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0], g)
+
+
+def test_tanh_cuda():
+    a = Tensor([0.1, 0.2, 0.3], requires_grad=True)
+    a.to('cuda')
+    y = (tanh(a) + tanh(a) + tanh(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([0.101, 0.2, 0.3], requires_grad=True)
+    a2.to('cuda')
+    y2 = (tanh(a2) + tanh(a2) + tanh(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0], g)
+
+
+def test_sigmod():
+    a = Tensor([2, 4, 6, 8], requires_grad=True)
+    y = (sigmod(a) + sigmod(a) + sigmod(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([2.001, 4, 6, 8], requires_grad=True)
+    y2 = (sigmod(a2) + sigmod(a2) + sigmod(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0], g)
+
+
+def test_sigmod_cuda():
+    a = Tensor([2, 4, 6, 8], requires_grad=True)
+    a.to('cuda')
+    y = (sigmod(a) + sigmod(a) + sigmod(a)).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([2, 4.001, 6, 8], requires_grad=True)
+    a2.to('cuda')
+    y2 = (sigmod(a2) + sigmod(a2) + sigmod(a2)).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[1], g)
+
+
+def test_softmax_crossentropy():
+    a = Tensor([[5, -1, 2, 3, 0, 1], [1, 2, 3, 4, 5, 6]], requires_grad=True)
+    b = Tensor([[1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]], requires_grad=True)
+    y = softmax_cross_entropy(a, b).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([[5.001, -1, 2, 3, 0, 1], [1, 2, 3, 4, 5, 6]], requires_grad=True)
+    y2 = softmax_cross_entropy(a2, b).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0][0], g)
+
+
+
+def test_softmax_crossentropy_cuda():
+    a = Tensor([[5, -1, 2, 3, 0, 1], [1, 2, 3, 4, 5, 6]], requires_grad=True)
+    b = Tensor([[1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]], requires_grad=True)
+    a.to('cuda')
+    b.to('cuda')
+    y = softmax_cross_entropy(a, b).sum()
+    print(y.data)
+    y.backward()
+    print(a.grad.npdata)
+
+    a2 = Tensor([[5, -1, 2.001, 3, 0, 1], [1, 2, 3, 4, 5, 6]], requires_grad=True)
+    a2.to('cuda')
+    y2 = softmax_cross_entropy(a2, b).sum()
+    print(y2.data)
+    g = (y2.data - y.data) / 0.001
+    print(g)
+    assert_grad_right(a.grad.npdata[0][2], g)

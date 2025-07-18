@@ -127,10 +127,10 @@ class RawTensor:
 
             if a.shape == b.shape:
                 cuda.add_vec(a.data, b.data, out, a.size)
-            elif b.shape == (1, a.shape[1]):
+            elif len(a.shape) == 2 and len(b.shape) == 2  and b.shape[1] == a.shape[1]:
                 # 按行广播：(N, D) + (1, D)
                 cuda.add_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 0)
-            elif b.shape == (a.shape[0], 1):
+            elif len(a.shape) == 2 and b.shape[0] == a.shape[0]:
                 # 按列广播：(N, D) + (N, 1)
                 cuda.add_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 1)
 
@@ -166,16 +166,14 @@ class RawTensor:
                 a, b = b, a
             
             out = cuda.alloc_on_gpu(a.size)
-
             if a.shape == b.shape:
                 cuda.mul_vec(a.data, b.data, out, a.size)
-            elif b.shape == (1, a.shape[1]):
+            elif len(a.shape) == 2 and len(b.shape) == 2  and b.shape[1] == a.shape[1]:
                 # 按行广播：(N, D) + (1, D)
                 cuda.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 0)
-            elif b.shape == (a.shape[0], 1):
+            elif len(a.shape) == 2 and b.shape[0] == a.shape[0]:
                 # 按列广播：(N, D) + (N, 1)
                 cuda.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 1)
-
             elif b.shape == (1,):
                 # 标量广播
                 cuda.mul_vec_broadcast(a.data, b.data, out, a.size, 1, -1)
@@ -196,6 +194,7 @@ class RawTensor:
     
     def __sub__(self, other):
         return self + (-other)
+    
 
     cuda.power.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
     def __pow__(self, power):
@@ -210,7 +209,12 @@ class RawTensor:
             r = self.data ** power
             return RawTensor(r, device=self.device)
 
-   
+
+    def __truediv__(self, other):
+        other = float(other)
+    
+        return self * other ** -1
+    
     cuda.power_grad.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_float, ctypes.c_int]
     @staticmethod
     def pow_grad(a, b):
@@ -252,6 +256,14 @@ class RawTensor:
             return RawTensor(out, device=self.device, shape=shape)
         else:
             d = self.data.sum(axis=axis, keepdims=keepdims)
+            return RawTensor(d, device=self.device)
+
+    
+    def mean(self):
+        if self.device == 'cuda':
+            assert 1 == 0
+        else:
+            d = self.data.mean()
             return RawTensor(d, device=self.device)
 
 
@@ -405,19 +417,111 @@ class RawTensor:
             cuda.launch_tanh_grad(a.data, out, sz)
             return RawTensor(out, device=a.device, shape=a.shape)
         else:
-            t = np.tanh(a.data)
-            grad = (1 - t ** 2)
+            t = a.data  # a = np.tanh(x)
+            grad = (1 - t ** 2)  
             return RawTensor(grad, device=a.device) 
 
+
+    cuda.launch_sigmoid.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def sigmoid(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_sigmoid(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            r = 1.0 / (1.0 + np.exp(-a.data))
+            return RawTensor(r, device=a.device)
+
+
+    cuda.launch_sigmoid_grad.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_int
+    ]
+
+    @staticmethod
+    def sigmoid_grad(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_sigmoid_grad(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            s = a.data  # a = sigmoid(x)
+            grad = s * (1.0 - s)
+            return RawTensor(grad, device=a.device)  
+        
+    cuda.launch_exp.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_int
+    ]
+    @staticmethod
+    def exp(a):
+        if a.device == 'cuda':
+            sz = a.size
+            out = cuda.alloc_on_gpu(sz)
+            cuda.launch_exp(a.data, out, sz)
+            return RawTensor(out, device=a.device, shape=a.shape)
+        else:
+            r = np.exp(a.data)
+            return RawTensor(r, device=a.device)
+        
     
-    # @staticmethod
-    # def sigmod(a):
-    #     if a.device == 'cuda':
-    #         pass
-    #     else:
-    #         r = 1 / (1 + np.exp(-x._data))
-    #         return Ops.tensor(r, device=a.device, op='sigmod')
-        
+    cuda.launch_softmax_simple.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int
+    ]
+    @staticmethod
+    def softmax(logits):
+        if logits.device == 'cuda':
+            B, C = logits.shape
+            out = cuda.alloc_on_gpu(B * C)
+            cuda.launch_softmax_simple(logits.data, out, B, C)
+            return RawTensor(out, shape=(B, C), device='cuda')
+        else:
+            e = np.exp(logits.data - np.max(logits.data, axis=-1, keepdims=True))
+            probs = e / e.sum(axis=-1, keepdims=True)
+            # loss_data = -np.sum(target._data * np.log(probs + 1e-9), axis=-1, keepdims=True)
+            return RawTensor(probs, device=logits.device)
 
 
-        
+    cuda.launch_cross_entropy_loss_simple.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_int, ctypes.c_int
+    ]
+    @staticmethod
+    def cross_entropy(probs, target):
+        if RawTensor._device(probs, target) == 'cuda':
+            B, C = probs.shape
+            out = cuda.alloc_on_gpu(B)
+            cuda.launch_cross_entropy_loss_simple(probs.data, target.data, out, B, C)
+            return RawTensor(out, device=probs.device, shape=(B,))
+        else:
+            loss = -np.sum(target.data * np.log(probs.data + 1e-9), axis=-1, keepdims=True)
+            return RawTensor(loss, device=probs.device)
+
+
+
+    cuda.launch_softmax_cross_entropy_grad.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+        ctypes.c_int, ctypes.c_int
+    ]
+    @staticmethod
+    def softmax_cross_entropy_grad(probs, target):
+        assert probs.shape == target.shape
+        if RawTensor._device(probs, target) == 'cuda':
+            B, C = probs.shape
+            grad = cuda.alloc_on_gpu(B * C)
+            cuda.launch_softmax_cross_entropy_grad(
+                probs.data, target.data, grad, B, C
+            )
+            return RawTensor(grad, device=probs.device, shape=probs.shape)  
+        else:
+            grad = probs.data - target.data
+            return RawTensor(grad, device=probs.device)

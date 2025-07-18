@@ -209,6 +209,23 @@ def test_vec_mul_broadcast():
     print_res(res_cpu, res_gpu)
 
 
+def test_vec_mul_broadcast2():
+    a = [[1, 1, 1], [3, 3, 3]]
+    b = [[2], [3]]
+    ta = RawTensor(a)
+    tb = RawTensor(b)
+
+    res_cpu = ta * tb
+
+    ta.to('cuda')
+    tb.to('cuda')
+    res_gpu = ta * tb
+    res_gpu.to('cpu')
+
+    assert_equal(res_cpu, res_gpu)
+    print_res(res_cpu, res_gpu)
+
+
 def test_power_large():
     N = 100_000_000  
     x = np.full((3, N), 2.0, dtype=np.float32)
@@ -351,5 +368,21 @@ def test_relu():
     res_gpu.to('cpu')
     # print(res_gpu.data)
     assert_equal(res_cpu, res_gpu)
+
+
+def test_softmax():
+    a = [[5, -1, 2, 3, 0, 1], [1, 2, 3, 4, 5, 6]]
+    b = [[1, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0]]
+    ta = RawTensor(a)
+    tb = RawTensor(b)
+    s_cpu = RawTensor.cross_entropy(RawTensor.softmax(ta), tb)
+    print(s_cpu.data)
+
+    ta.to('cuda')
+    tb.to('cuda')
+    s_gpu = RawTensor.cross_entropy(RawTensor.softmax(ta), tb)
+    print(s_gpu.npdata)
+    # assert_equal(s_cpu, s_gpu.npdata)
+
     
     
