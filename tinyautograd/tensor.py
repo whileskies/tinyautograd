@@ -80,18 +80,16 @@ class Tensor:
         for node in reversed(topo):
             node._backward()
 
-    # def _unbroadcast(self, grad, shape):
-    #     """将梯度 grad 还原成目标 shape（用于广播反向传播）"""
 
-    #     # while len(grad.shape) > len(shape):
-    #     #     grad = grad.sum(axis=0)
-    #     # for i, (g_dim, s_dim) in enumerate(zip(grad.shape, shape)):
-    #     #     if s_dim == 1 and g_dim != 1:
-    #     #         grad = grad.sum(axis=i, keepdims=True)
-    #     if grad.shape[0] != shape[0]:
-    #         return np.sum(grad, axis=0, keepdims=True)
-    #     else:
-    #         return grad
+    def _unbroadcast(self, grad, shape):
+        """将梯度 grad 还原成目标 shape（用于广播反向传播）"""
+        while len(shape) < len(grad.shape):
+            shape = (1,) + shape
+        for i, (g, s) in enumerate(zip(grad.shape, shape)):
+            if s == 1:
+                grad = grad.sum(axis=i, keepdims=True)
+        grad.shape = shape
+        return grad
 
 
     def __add__(self, other):
@@ -101,12 +99,12 @@ class Tensor:
 
         def _backward():
             if self._requires_grad:
-                # grad = self._unbroadcast(out._grad, self._data.shape)
-                grad = out._grad
+                grad = self._unbroadcast(out._grad, self._data.shape)
+                # grad = out._grad
                 self._add_grad(grad)
             if other._requires_grad:
-                # grad = self._unbroadcast(out._grad, other._data.shape)
-                grad = out._grad
+                grad = self._unbroadcast(out._grad, other._data.shape)
+                # grad = out._grad
                 other._add_grad(grad)
         out._backward = _backward
 
@@ -205,10 +203,3 @@ class Tensor:
 
         return out
     
-    # def __del__(self):
-    #     if self._device == "cuda":
-    #         if self.data is not None:
-    #             # print("free gpu memory")
-    #             Ops.free_gpu_memory(self.data)
-    #         # if self.grad is not None:
-    #         #     free_gpu_memory(self.grad.data)

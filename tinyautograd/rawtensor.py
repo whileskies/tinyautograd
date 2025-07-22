@@ -82,30 +82,6 @@ class RawTensor:
         else:
             return self.data
     
-    # @staticmethod
-    # def broadcast_shape(shape_a, shape_b):
-    #     # 反向对齐
-    #     result = []
-    #     for a_dim, b_dim in zip(Ops._reverse(shape_a), Ops._reverse(shape_b)):
-    #         if a_dim == b_dim:
-    #             result.append(a_dim)
-    #         elif a_dim == 1:
-    #             result.append(b_dim)
-    #         elif b_dim == 1:
-    #             result.append(a_dim)
-    #         else:
-    #             raise ValueError(f"无法广播 shape: {shape_a} vs {shape_b}")
-        
-    #     # 加上多余的维度
-    #     longer = shape_a if len(shape_a) > len(shape_b) else shape_b
-    #     result += Ops._reverse(longer)[len(result):]
-
-    #     return tuple(reversed(result))
-
-    # @staticmethod
-    # def _reverse(t):
-    #     return t[::-1]
-    
 
     cuda.add_vec.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
     cuda.add_vec_broadcast.argtypes = [

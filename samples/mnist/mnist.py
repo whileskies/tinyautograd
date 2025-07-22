@@ -3,6 +3,7 @@ import gzip
 import struct
 import numpy as np
 from tqdm import tqdm
+import time
 
 
 def read_mnist_images(file_path):
@@ -11,7 +12,7 @@ def read_mnist_images(file_path):
         # 读取图像数据
         images = np.frombuffer(f.read(), dtype=np.uint8)
         images = images.reshape(num_images, num_rows * num_cols)  # 重塑成 (num_images, 28*28)
-        images = images / 255.0  # 归一化像素值 [0, 1]
+        images =  images.astype(np.float32) / 255.0# 归一化像素值 [0, 1]
     return images
 
 
@@ -83,6 +84,53 @@ def train(model, train_data, train_labels, optimizer, epochs=10, batch_size=64):
 
         epoch_accuracy = correct / total
         print(f'Epoch {epoch+1}/{epochs}, Loss: {epoch_loss/len(train_data)}, Accuracy: {epoch_accuracy*100:.2f}%')
+
+
+# def train(model, train_data, train_labels, optimizer, epochs=10, batch_size=64):
+#     for epoch in range(epochs):
+#         epoch_loss = 0
+#         correct = 0
+#         total = 0
+
+#         total_forward_time = 0.0
+#         total_backward_time = 0.0
+
+#         indices = np.random.permutation(len(train_data))
+#         train_data, train_labels = train_data[indices], train_labels[indices]
+        
+#         for i in tqdm(range(0, len(train_data), batch_size), desc=f"Epoch {epoch+1}"):
+#             x_batch = Tensor(train_data[i:i+batch_size])
+#             y_batch = Tensor(train_labels[i:i+batch_size])
+
+#             # === 前向传播时间 ===
+#             t0 = time.perf_counter()
+#             logists = model(x_batch)
+#             loss = softmax_cross_entropy(logists, y_batch).sum()
+#             forward_time = time.perf_counter() - t0
+#             total_forward_time += forward_time
+
+#             epoch_loss += loss.data
+
+#             predicted = np.argmax(logists.data, axis=1)
+#             labels = np.argmax(y_batch.data, axis=1)
+#             correct += np.sum(predicted == labels)
+#             total += y_batch.data.shape[0]
+
+#             # === 反向传播时间 ===
+#             t1 = time.perf_counter()
+#             loss.backward()
+#             backward_time = time.perf_counter() - t1
+#             total_backward_time += backward_time
+
+#             optimizer.step()
+#             optimizer.zero_grad()
+
+#         epoch_accuracy = correct / total
+#         print(f"\nEpoch {epoch+1}/{epochs}")
+#         print(f"  Loss: {epoch_loss / len(train_data)}")
+#         print(f"  Accuracy: {epoch_accuracy * 100:.2f}%")
+#         print(f"  Forward time: {total_forward_time:.4f} sec")
+#         print(f"  Backward time: {total_backward_time:.4f} sec")
 
 
 def test(model, test_data, test_labels):

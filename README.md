@@ -7,6 +7,6 @@ python -m samples.mnist.mnist
 # cuda 🚧
 nvcc -shared -o libops.so tinyautograd/ops.cu  -Xcompiler -fPIC -lcublas
 
-python -m samples.mnist.mnist-cuda
+python -m samples.mnist.mnist_cuda
 
 pytest tinyautograd/test_rawtensor.py -s -v --cache-clear
