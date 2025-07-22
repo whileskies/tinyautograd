@@ -14,6 +14,10 @@ class Linear(Layer):
     def __call__(self, x: Tensor):
         return x.matmul(self._W) + self._b
     
+    def to(self, device):
+        self._W.to(device)
+        self._b.to(device)
+    
     def parameters(self):
         return [self._W, self._b]
 
@@ -30,6 +34,10 @@ class MLP(Layer):
             if i < len(self._layers) - 1:
                 x = self._activation_fun(x)
         return x
+    
+    def to(self, device):
+        for l in self._layers:
+            l.to(device)
     
     def parameters(self):
         return [p for l in self._layers for p in l.parameters()]

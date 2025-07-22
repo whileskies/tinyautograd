@@ -120,17 +120,25 @@ class RawTensor:
         
         a, b = self, other
         if RawTensor._device(a, b) == 'cuda':
-            if a.size < b.size:
+            if (len(a.shape), a.size) < (len(b.shape), b.size):
                 a, b = b, a
+
+            if len(a.shape) == 2 and len(b.shape) == 1 and b.shape[0] > 1:
+                # 如果是行广播情况，如 a.shape = (N, D), b.shape = (D,)
+                if len(a.shape) == 2 and b.shape[0] == a.shape[1]:
+                    b.shape = (1, b.shape[0])  
+                # 如果是列广播情况，如 a.shape = (N, D), b.shape = (N,)
+                elif len(a.shape) == 2 and b.shape[0] == a.shape[0]:
+                    b.shape = (b.shape[0], 1)
             
             out = cuda.alloc_on_gpu(a.size)
 
             if a.shape == b.shape:
                 cuda.add_vec(a.data, b.data, out, a.size)
-            elif len(a.shape) == 2 and len(b.shape) == 2  and b.shape[1] == a.shape[1]:
+            elif len(a.shape) == 2 and len(b.shape) == 2 and b.shape[1] == a.shape[1]:
                 # 按行广播：(N, D) + (1, D)
                 cuda.add_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 0)
-            elif len(a.shape) == 2 and b.shape[0] == a.shape[0]:
+            elif len(a.shape) == 2 and len(b.shape) == 2 and b.shape[0] == a.shape[0]:
                 # 按列广播：(N, D) + (N, 1)
                 cuda.add_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 1)
 
@@ -162,16 +170,24 @@ class RawTensor:
 
         a, b = self, other
         if RawTensor._device(a, b) == 'cuda':
-            if a.size < b.size:
+            if (len(a.shape), a.size) < (len(b.shape), b.size):
                 a, b = b, a
+
+            if len(a.shape) == 2 and len(b.shape) == 1 and b.shape[0] > 1:
+                # 如果是行广播情况，如 a.shape = (N, D), b.shape = (D,)
+                if len(a.shape) == 2 and b.shape[0] == a.shape[1]:
+                    b.shape = (1, b.shape[0])  
+                # 如果是列广播情况，如 a.shape = (N, D), b.shape = (N,)
+                elif len(a.shape) == 2 and b.shape[0] == a.shape[0]:
+                    b.shape = (b.shape[0], 1)
             
             out = cuda.alloc_on_gpu(a.size)
             if a.shape == b.shape:
                 cuda.mul_vec(a.data, b.data, out, a.size)
-            elif len(a.shape) == 2 and len(b.shape) == 2  and b.shape[1] == a.shape[1]:
+            elif len(a.shape) == 2 and len(b.shape) == 2 and b.shape[1] == a.shape[1]:
                 # 按行广播：(N, D) + (1, D)
                 cuda.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 0)
-            elif len(a.shape) == 2 and b.shape[0] == a.shape[0]:
+            elif len(a.shape) == 2 and len(b.shape) == 2 and b.shape[0] == a.shape[0]:
                 # 按列广播：(N, D) + (N, 1)
                 cuda.mul_vec_broadcast(a.data, b.data, out, a.size, a.shape[1], 1)
             elif b.shape == (1,):
@@ -184,7 +200,7 @@ class RawTensor:
         else:
             r = a.data * b.data
             return RawTensor(r, device=a.device)
-    
+
 
     def __rmul__(self, other):
         return self * other

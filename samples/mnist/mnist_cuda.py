@@ -67,6 +67,8 @@ def train(model, train_data, train_labels, optimizer, epochs=10, batch_size=64):
         for i in tqdm(range(0, len(train_data), batch_size)):
             x_batch = Tensor(train_data[i:i+batch_size])
             y_batch = Tensor(train_labels[i:i+batch_size])
+            x_batch.to('cuda')
+            y_batch.to('cuda')
 
             logists = model(x_batch)
             loss = softmax_cross_entropy(logists, y_batch).sum()
@@ -94,6 +96,8 @@ def test(model, test_data, test_labels):
     for i in tqdm(range(0, total, batch_size)):
         x_batch = Tensor(test_data[i:i+batch_size])
         y_batch = Tensor(test_labels[i:i+batch_size])
+        x_batch.to('cuda')
+        y_batch.to('cuda')
 
         logists = model(x_batch)
 
@@ -116,6 +120,7 @@ def main():
 
 
     model = MLP(28*28, [512, 100, 20], 10, activation_fun=relu)
+    model.to('cuda')
     opt = SGD(model.parameters())
     train(model, train_data, train_labels, opt, epochs=20, batch_size=64)
     test(model, test_data, test_labels)

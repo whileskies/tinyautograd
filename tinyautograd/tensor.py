@@ -1,12 +1,13 @@
 from .rawtensor import *
 
 class Tensor:
-    def __init__(self, data, op='', requires_grad=False):
+    def __init__(self, data, op='', label='', requires_grad=False):
         if isinstance(data, RawTensor):
             self._data = data
         else:
             self._data = RawTensor(data)
         self._op = op
+        self._label = label
         self._grad = None
         self._requires_grad = requires_grad
         self._backward = lambda: None
@@ -14,7 +15,7 @@ class Tensor:
 
 
     def __repr__(self):
-        return f"Tensor(op={self._op}, shape={self._shape})"
+        return f"Tensor(op={self._op}, label={self._label})"
     
     @property
     def data(self):
