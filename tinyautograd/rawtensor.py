@@ -3,7 +3,15 @@ import ctypes
 import numpy as np
 
 
-cuda = ctypes.cdll.LoadLibrary("./libops.so")
+try:
+    cuda = ctypes.cdll.LoadLibrary("./libops.so")
+except OSError:
+    class DummyCuda:
+        def __getattr__(self, name):
+            def _dummy(*args, **kwargs):
+                raise RuntimeError(f"CUDA operation '{name}' is unavailable (libops.so not found)")
+            return _dummy
+    cuda = DummyCuda()
 
 
 cuda.alloc_on_gpu.argtypes = [ctypes.c_int]
